@@ -1,0 +1,71 @@
+﻿STRING 10
+{
+玩家 1
+}
+
+STRING 11
+{
+玩家 2
+}
+
+STRING 12
+{
+玩家 3
+}
+
+STRING 13
+{
+玩家 4
+}
+
+STRING 14
+{
+部队 1
+}
+
+STRING 15
+{
+部队 2
+}
+
+STRING 16
+{
+部队 3
+}
+
+STRING 17
+{
+部队 4
+}
+
+STRING 18
+{
+部队 5
+}
+
+STRING 19
+{
+部队 6
+}
+
+STRING 20
+{
+Turtle Rock
+}
+
+STRING 21
+{
+1v1 或 2v2
+}
+
+STRING 22
+{
+曾经是一座流亡者的岛屿，而今对追求宝物的人来说，是财富之岛。
+}
+
+STRING 23
+{
+Blizzard Entertainment
+}
+
+

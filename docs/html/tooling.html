@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>逆向工程工具集 · japi.dll</title>
+<style>
+  :root {
+    --bg:#0d1117; --card-bg:#161b22; --border:#30363d; --text:#c9d1d9;
+    --text-dim:#8b949e; --accent:#58a6ff; --green:#3fb950; --orange:#d2991d;
+    --red:#f85149; --code-bg:#0d1117;
+  }
+  * { margin:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .nav { background:var(--card-bg); border-bottom:1px solid var(--border); padding:12px 24px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .nav a { color:var(--accent); text-decoration:none; font-size:0.9em; }
+  .nav a:hover { text-decoration:underline; }
+  .nav .cur { color:var(--text); font-weight:600; }
+  .container { max-width:1000px; margin:0 auto; padding:24px 20px; }
+  h1 { font-size:1.8em; margin-bottom:8px; }
+  h2 { font-size:1.35em; margin:36px 0 14px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+  h3 { font-size:1.1em; margin:22px 0 10px; color:var(--accent); }
+
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:14px 18px; overflow-x:auto; font:12.5px/1.5 "Cascadia Code","Consolas",monospace; margin:12px 0; }
+  code { font:12.5px/1.4 "Cascadia Code","Consolas",monospace; background:rgba(255,255,255,0.06); padding:1px 5px; border-radius:3px; }
+  pre code { background:none; padding:0; }
+
+  table { width:100%; border-collapse:collapse; margin:14px 0; font-size:0.92em; }
+  th { background:var(--card-bg); padding:9px 12px; text-align:left; border:1px solid var(--border); color:var(--accent); }
+  td { padding:7px 12px; border:1px solid var(--border); }
+  tr:nth-child(even) td { background:rgba(255,255,255,0.015); }
+
+  .tool-card { background:var(--card-bg); border:1px solid var(--border); border-radius:8px; padding:18px 22px; margin:14px 0; }
+  .tool-card h3 { margin:0 0 8px; }
+  .tool-card .desc { color:var(--text-dim); font-size:0.92em; }
+  .tool-card .files { margin-top:8px; font-size:0.85em; }
+  .tool-card .files code { color:var(--green); }
+
+  @media (max-width:700px) { .container { padding:16px 12px; } }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="index.html">← 首页</a>
+  <a href="architecture.html">架构总览</a>
+  <a href="modules.html">Lua 模块</a>
+  <a href="internals.html">VM 内部</a>
+  <a href="build-and-test.html">构建与测试</a>
+  <a href="source-index.html">源码索引</a>
+  <span class="cur">工具链</span>
+</div>
+
+<div class="container">
+
+<h1>🔬 逆向工程工具集</h1>
+<p>项目包含丰富的辅助工具链：30+ Python 逆向分析脚本、JASS 语法检查器、MPQ 转换工具、参考地图和外部文档。</p>
+
+<h2>1. Python 逆向分析脚本（tools/）</h2>
+
+<p>共 30 个 Python 脚本，用于逆向分析 game.dll。按用途分为以下几类：</p>
+
+<h3>1.1 vtable 定位系列</h3>
+<table>
+<tr><th>脚本</th><th>用途</th></tr>
+<tr><td><code>find_vtable.py</code></td><td>通过 RTTI 类名字符串定位 C++ 虚函数表</td></tr>
+<tr><td><code>find_vtable_v2.py</code> / <code>find_vtable_v3.py</code></td><td>vtable 定位的迭代版本（不同扫描策略）</td></tr>
+<tr><td><code>find_typeinfo.py</code></td><td>定位 type_info 结构</td></tr>
+<tr><td><code>find_rtti.py</code></td><td>RTTI 信息提取</td></tr>
+<tr><td><code>trace_vfn_fast.py</code> / <code>trace_vfn_ptr.py</code></td><td>虚函数指针追踪</td></tr>
+</table>
+
+<h3>1.2 WndProc 定位系列（消息循环分析）</h3>
+<table>
+<tr><td><code>find_wndproc.py</code></td><td>定位 Warcraft III 的主窗口过程函数</td></tr>
+<tr><td><code>find_wndproc_v2.py</code> / <code>v3.py</code> / <code>v4.py</code></td><td>WndProc 定位的迭代版本（不同启发式策略）</td></tr>
+</table>
+
+<h3>1.3 场景/加载分析系列</h3>
+<table>
+<tr><td><code>find_scene_transition.py</code></td><td>场景切换分析（游戏状态机）</td></tr>
+<tr><td><code>find_loading_patch.py</code> / <code>find_patch_v2.py</code></td><td>加载流程补丁定位</td></tr>
+<tr><td><code>analyze_loading_state.py</code></td><td>加载状态机分析</td></tr>
+<tr><td><code>deep_dive_loading.py</code></td><td>加载流程深度分析</td></tr>
+<tr><td><code>find_cloading.py</code></td><td>CLoading 类定位</td></tr>
+<tr><td><code>analyze_scene_guard.py</code> / <code>check_scene_guard.py</code></td><td>场景保护状态分析</td></tr>
+</table>
+
+<h3>1.4 字节码/指令分析系列</h3>
+<table>
+<tr><td><code>disasm_handlers.py</code> / <code>disasm_loading.py</code></td><td>game.dll 反汇编</td></tr>
+<tr><td><code>analyze_2EE740.py</code></td><td>特定函数 0x2EE740 的深度分析</td></tr>
+<tr><td><code>analyze_call_site.py</code></td><td>调用点模式分析</td></tr>
+<tr><td><code>find_key_handler.py</code> / <code>find_key_handler_final.py</code></td><td>键盘事件处理函数定位</td></tr>
+</table>
+
+<h3>1.5 验证/检查系列</h3>
+<table>
+<tr><td><code>verify_approach.py</code> / <code>verify_patch.py</code></td><td>方法/patch 正确性验证</td></tr>
+<tr><td><code>check_bytes.py</code></td><td>字节序列对比验证</td></tr>
+<tr><td><code>check_exports.py</code></td><td>DLL 导出表检查</td></tr>
+<tr><td><code>search_bytes.py</code></td><td>通用字节模式搜索</td></tr>
+<tr><td><code>list_imports.py</code></td><td>PE 导入表列出</td></tr>
+</table>
+
+<h2>2. Callback Exploit 代码</h2>
+
+<div class="tool-card">
+<h3>tools/callback</h3>
+<div class="desc">1057 行 JASS 代码（AI 脚本格式），在 War3 加载时由 StartCampaignAI 触发。执行：版本检测 → UnlockMemory → 分配 RWX 内存 → ExportFileFromMpq → LoadLibrary(japi.dll) → GetProcAddress("call") → CallCdecl(call, pExportFromMpq)。</div>
+<div class="files">文件: <code>tools/callback</code> (1,057 行), <code>tools/callback_ydwe.j</code> (YDWE 版本参考)</div>
+</div>
+
+<div class="tool-card">
+<h3>reference/builtin-japi/callback</h3>
+<div class="desc">内置 JAPI 的原始 callback 代码（908 行）。与我们的版本几乎相同，但 main() 末尾调用 "Initialize" 导出（而非 "call"）并传递 0（而非 pExportFromMpq）。</div>
+<div class="files">文件: <code>reference/builtin-japi/callback</code> (908 行)</div>
+</div>
+
+<h2>3. pjass — JASS 语法检查器</h2>
+
+<div class="tool-card">
+<h3>tools/pjass-src/</h3>
+<div class="desc">完整的 pjass 源码（C 语言实现的 JASS 词法/语法分析器，YACC 语法 + Flex 词法），约 120 个测试用例覆盖 11 个测试类别。用于验证 callback 代码和 war3map.j 的语法正确性。</div>
+<div class="files">文件: <code>tools/pjass-src/</code> (C 源码 + YACC 语法 + Flex 词法 + 120 测试), <code>tools/pjass.exe</code>, <code>tools/pjass-std.exe</code></div>
+</div>
+
+<h2>4. w3x2lni — MPQ 地图转换器</h2>
+
+<div class="tool-card">
+<h3>tools/w3x2lni/</h3>
+<div class="desc">全功能 Warcraft III 地图格式转换器，支持 w3x（MPQ）和 lni（目录格式）之间的双向转换。Lua 5.4 驱动，包含 GUI 和 CLI 界面、完整的 Warcraft III 游戏数据预置（enUS-1.27.1 / zhCN-1.24.4 / zhCN-1.32.8）、SLK 回端/前端、地图构建器、FFI 绑定。build.ps1 使用其 CLI 模式解包/打包 demo.w3x。</div>
+<div class="files">文件: <code>tools/w3x2lni/bin/w3x2lni-lua.exe</code>, <code>tools/w3x2lni/script/</code> (100+ Lua 模块)</div>
+</div>
+
+<h2>5. 调试工具</h2>
+
+<table>
+<tr><th>工具</th><th>路径</th><th>用途</th></tr>
+<tr><td>DebugView</td><td><code>tools/Dbgview.exe</code> / <code>dbgview64.exe</code></td><td>Sysinternals 调试输出实时查看器，捕获 OutputDebugStringA 输出</td></tr>
+<tr><td>japi-debug.log</td><td>War3 目录</td><td>dbg_printf 自动写入的持久化调试日志</td></tr>
+</table>
+
+<h2>6. JASS API 库文件（tools/core/）</h2>
+
+<p>8 个 JASS 库文件，提供类型转换、内存操作、字符串操作和 Storm.dll 访问：</p>
+
+<table>
+<tr><th>文件</th><th>行数</th><th>内容</th></tr>
+<tr><td><code>02-APIBasicUtils.j</code></td><td>~150</td><td>基础工具（hotkey, camera, player 辅助）</td></tr>
+<tr><td><code>03-APITypecast.j</code></td><td>~400</td><td>类型转换（int↔float, int↔string, 位操作）</td></tr>
+<tr><td><code>04-APIMemory.j</code></td><td>~850</td><td>内存读写 API（任意地址 R/W, 字符串读写, 数组操作）</td></tr>
+<tr><td><code>05-APIMemoryCalls.j</code></td><td>~1450</td><td>内存调用（stdcall/cdecl/thiscall/fastcall 封装, LoadLibrary/GetProcAddress/FreeLibrary 包装器）</td></tr>
+<tr><td><code>06-APIMemoryBitwise.j</code></td><td>~100</td><td>按位操作（AND/OR/XOR/NOT, bit test/set）</td></tr>
+<tr><td><code>07-APIMemoryString.j</code></td><td>~200</td><td>字符串内存操作（strlen, strcpy, strcat, sprintf 的内存实现）</td></tr>
+<tr><td><code>08-APIMemoryKernel.j</code></td><td>~370</td><td>内核 API（VirtualAlloc, VirtualProtect, CreateThread, WriteProcessMemory）</td></tr>
+<tr><td><code>10-APIMemoryStormDLL.j</code></td><td>~165</td><td>Storm.dll API（文件操作, MPQ 访问）</td></tr>
+</table>
+
+<h2>7. 参考源</h2>
+
+<table>
+<tr><th>资源</th><th>路径</th><th>说明</th></tr>
+<tr><td>内置 JAPI 模板地图</td><td><code>reference/builtin-japi/original.w3x</code></td><td>2.5 MB，build.ps1 的模板基础</td></tr>
+<tr><td>wenhao_plugin 逆向报告</td><td><code>reference/builtin-japi/wenhao_plugin逆向分析报告.html</code></td><td>34 KB HTML，对 wenhao_plugin.dll 的完整逆向分析</td></tr>
+<tr><td>UjAPI native 声明</td><td><code>reference/ujapi/UjAPI.j</code> + <code>ujapi_common.j</code></td><td>425 KB + 623 KB，完整的扩展 native API 声明</td></tr>
+<tr><td>UjAPI native 参考手册</td><td><code>reference/ujapi/UjAPI_Native参考手册.html</code></td><td>429 KB，自动生成的 HTML 参考文档</td></tr>
+<tr><td>UjAPI cache（地图文件）</td><td><code>reference/ujapi/_ujapi_cache/</code></td><td>完整 UjAPI 地图：UjAPI.dll, lua53.dll, main.lua, callback 等</td></tr>
+<tr><td>YDWE 架构分析</td><td><code>docs/analysis/YDWE-LuaEngine注入与双虚拟机架构分析.md</code></td><td>27 KB，YDWE 双 Lua 状态架构的深入分析</td></tr>
+<tr><td>YDWE 架构分析 (HTML)</td><td><code>docs/analysis/YDWE-LuaEngine注入与双虚拟机架构分析.html</code></td><td>41 KB，同上的 HTML 渲染版</td></tr>
+</table>
+
+<h2>8. gen_native_doc.py</h2>
+
+<div class="tool-card">
+<h3>reference/ujapi/gen_native_doc.py</h3>
+<div class="desc">224 行 Python 脚本。从 <code>_natives_raw.txt</code> 读取原生声明，按 50+ 类别分组（类型转换/位运算/内存/Frame/UI/D3D9/鼠标/单位/技能/物品/玩家/触发器/伤害/选择/移动/Buff/攻击/英雄/资源/科技/镜头/声音/图像/天气/小地图/命令/字符串/文件/网络/游戏状态/调试/Hack/数据字段存取/其他），生成带侧边栏导航的 HTML 参考手册 (<code>UjAPI_Native参考手册.html</code>)。</div>
+</div>
+
+<h2>9. inject_ujapi_wrapper.ps1</h2>
+
+<div class="tool-card">
+<h3>reference/ujapi/inject_ujapi_wrapper.ps1</h3>
+<div class="desc">37 行 PowerShell 脚本。将 <code>ujapi_wrapper.j</code>（基于 hashtable 的 UjAPI 分发包装器）注入到 <code>war3map.j</code> 的 <code>//*  Main Initialization</code> 标记前。支持增量注入（检测已存在的 wrapper 并替换）。</div>
+</div>
+
+<h2>10. 外部工具依赖</h2>
+
+<table>
+<tr><th>工具</th><th>版本</th><th>用途</th></tr>
+<tr><td>Visual Studio 2022 Build Tools</td><td>17.x</td><td>MSVC 编译器（x86/Win32）</td></tr>
+<tr><td>CMake</td><td>3.20+</td><td>跨平台构建生成</td></tr>
+<tr><td>Lua 5.3.6</td><td>vendor 内置</td><td>静态链接进 japi.dll</td></tr>
+<tr><td>w3x2lni (Lua 5.4)</td><td>tools 内置</td><td>MPQ 地图打包/解包</td></tr>
+<tr><td>pjass</td><td>tools 内置</td><td>JASS 语法检查</td></tr>
+<tr><td>DebugView</td><td>tools 内置</td><td>调试输出查看</td></tr>
+<tr><td>Storm.dll</td><td>War3 自带</td><td>MPQ 文件系统访问（运行时通过 ordinal 加载）</td></tr>
+</table>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,363 @@
+#include <lua.hpp>
+#include <base/util/console.h>
+#include <array>
+#include <cstring>
+#include <cstdio>
+#include <string>
+#include "libs_runtime.h"
+
+// Debugger stub (not available in callback mode)
+namespace warcraft3::lua_engine::debugger {
+	inline int open(lua_State* L, int port) { (void)L; (void)port; return 0; }
+}
+namespace warcraft3::lua_engine::runtime {
+	int  version = 3;
+	int  handle_level = 2;
+	bool enable_console = false;
+	int  debugger = LUA_NOREF;
+	bool sleep = false;
+	bool catch_crash = true;
+
+	namespace perftrace {
+		static const size_t kMaxId = 10;
+		static std::array<uint64_t, kMaxId> count;
+		static std::array<uint64_t, kMaxId> time;
+		static uint64_t start;
+	}
+
+	void initialize()
+	{
+		handle_level = 2;
+		enable_console = false;
+		debugger = LUA_NOREF;
+		sleep = false;
+		catch_crash = true;
+
+		for (size_t i = 0; i < perftrace::kMaxId; ++i)
+		{
+			perftrace::count[i] = 0;
+			perftrace::time[i] = 0;
+		}
+		perftrace::start = 0;
+	}
+
+	int set_err_function(lua_State* L, int index)
+	{
+		if (lua_isfunction(L, index) || lua_isnil(L, index))
+		{
+			lua_pushvalue(L, index);
+			lua_setfield(L, LUA_REGISTRYINDEX, "_JASS_ERROR_HANDLE");
+		}
+		return 0;
+	}
+
+	int get_err_function(lua_State* L)
+	{
+		lua_getfield(L, LUA_REGISTRYINDEX, "_JASS_ERROR_HANDLE");
+		return 1;
+	}
+
+	int get_global_table(lua_State* L, const char* name, bool weak)
+	{
+		lua_getfield(L, LUA_REGISTRYINDEX, name);
+		if (!lua_istable(L, -1))
+		{
+			lua_pop(L, 1);
+			lua_newtable(L);
+			if (weak)
+			{
+				lua_newtable(L);
+				{
+					lua_pushstring(L, "__mode");
+					lua_pushstring(L, "kv");
+					lua_rawset(L, -3);
+				}
+				lua_setmetatable(L, -2);
+			}
+			lua_pushvalue(L, -1);
+			lua_setfield(L, LUA_REGISTRYINDEX, name);
+		}
+		return 1;
+	}
+
+	int thread_get_table(lua_State* L)
+	{
+		return get_global_table(L, "_JASS_THREAD_TABLE", true);
+	}
+
+	int thread_create(lua_State* L, int key, void* thread)
+	{
+		thread_get_table(L);
+		lua_pushvalue(L, key);
+		if (lua_rawget(L, -2) != LUA_TTABLE)
+		{
+			lua_pop(L, 2);
+			lua_newthread(L);
+			return 1;
+		}
+		if (lua_rawgetp(L, -1, thread) != LUA_TTHREAD)
+		{
+			lua_pop(L, 3);
+			lua_newthread(L);
+			return 1;
+		}
+
+		lua_pushnil(L);
+		lua_rawsetp(L, -3, thread);
+
+		lua_pushnil(L);
+		if (lua_next(L, -2))
+		{
+			lua_pop(L, 2);
+			lua_remove(L, -2);
+			lua_remove(L, -2);
+			return 1;
+		}
+
+		lua_pushvalue(L, key);
+		lua_rawset(L, -4);
+		lua_remove(L, -2);
+		lua_remove(L, -2);
+		return 1;
+	}
+
+	int thread_save(lua_State* L, int key, void* thread, int value)
+	{
+		thread_get_table(L);
+		lua_pushvalue(L, key);
+		if (lua_rawget(L, -2) != LUA_TTABLE)
+		{
+			lua_pop(L, 1);
+			lua_newtable(L);
+			lua_pushvalue(L, key);
+			lua_pushvalue(L, -2);
+			lua_rawset(L, -4);
+		}
+		lua_pushvalue(L, value);
+		lua_rawsetp(L, -2, thread);
+		lua_pop(L, 2);
+		return 0;
+	}
+
+	int handle_ud_get_table(lua_State* L)
+	{
+		return get_global_table(L, "_JASS_HANDLE_UD_TABLE", true);
+	}
+
+	int callback_get_table(lua_State* L)
+	{
+		return get_global_table(L, "_JASS_CALLBACK_TABLE", false);
+	}
+
+	int callback_push(lua_State* L, int idx)
+	{
+		callback_get_table(L);
+		
+		// read t[v]
+		lua_pushvalue(L, idx);
+		lua_rawget(L, -2);
+		if (lua_isnumber(L, -1))
+		{
+			int ret = lua_tointeger(L, -1);
+			lua_pop(L, 2);
+			return ret;
+		}
+		lua_pop(L, 1);
+
+		int free = 1 + (int)lua_rawlen(L, -1);
+
+		// t[free] = v
+		lua_pushvalue(L, idx);
+		lua_rawseti(L, -2, free);
+
+		// t[v] = free
+		lua_pushvalue(L, idx);
+		lua_pushinteger(L, free);
+		lua_rawset(L, -3);
+
+		// pop t
+		lua_pop(L, 1);
+		return free;
+	}
+
+	int callback_read(lua_State* L, int ref)
+	{
+		callback_get_table(L);
+		lua_rawgeti(L, -1, ref);
+		lua_remove(L, -2);
+		return 1;
+	}
+
+
+	int jass_runtime_set(lua_State* L)
+	{
+		const char* name = lua_tostring(L, 2);
+
+		if (strcmp("error_handle", name) == 0)
+		{
+			set_err_function(L, 3);
+		}
+		else if (strcmp("handle_level", name) == 0)
+		{
+			handle_level = luaL_checkinteger(L, 3);
+		}
+		else if (strcmp("console", name) == 0)
+		{
+			enable_console = !!lua_toboolean(L, 3);
+			if (enable_console)
+			{
+                base::console::enable();
+                base::console::disable_close_button();
+			}
+			else
+			{
+                base::console::disable();
+			}
+		}
+		else if (strcmp("debugger", name) == 0)
+		{
+			if (debugger == LUA_NOREF && lua_isinteger(L, 3))
+			{
+				if (debugger::open(L, (int)lua_tointeger(L, 3))) {
+					debugger = luaL_ref(L, LUA_REGISTRYINDEX);
+				}
+			}
+		}
+		else if (strcmp("sleep", name) == 0)
+		{
+			sleep = !!lua_toboolean(L, 3);
+		}
+		else if (strcmp("catch_crash", name) == 0)
+		{
+			catch_crash = !!lua_toboolean(L, 3);
+		}
+		
+		return 0;
+	}
+
+	int jass_runtime_get(lua_State* L)
+	{
+		const char* name = lua_tostring(L, 2);
+
+		if (strcmp("version", name) == 0)
+		{
+			lua_pushfstring(L, "1.0.0.0");
+			return 1;
+		}
+		else if (strcmp("error_handle", name) == 0)
+		{
+			return get_err_function(L);
+		}
+		else if (strcmp("handle_level", name) == 0)
+		{
+			lua_pushinteger(L, handle_level);
+			return 1;
+		}
+		else if (strcmp("console", name) == 0)
+		{
+			lua_pushboolean(L, enable_console);
+			return 1;
+		}
+		else if (strcmp("debugger", name) == 0)
+		{
+			lua_rawgeti(L, LUA_REGISTRYINDEX, debugger);
+			return 1;
+		}
+		else if (strcmp("sleep", name) == 0)
+		{
+			lua_pushboolean(L, sleep);
+			return 1;
+		}
+		else if (strcmp("can_sleep", name) == 0)
+		{
+			lua_pushboolean(L, sleep && lua_isyieldable(L));
+			return 1;
+		}
+		else if (strcmp("catch_crash", name) == 0)
+		{
+			lua_pushboolean(L, catch_crash);
+			return 1;
+		}
+
+		return 0;
+	}
+
+	namespace time
+	{
+		uint64_t get_counter()
+		{
+			LARGE_INTEGER v;
+			QueryPerformanceCounter(&v);
+			return v.QuadPart;
+		}
+
+		uint64_t get_frequency()
+		{
+			LARGE_INTEGER v;
+			QueryPerformanceFrequency(&v);
+			return v.QuadPart;
+		}
+	}
+
+	namespace perftrace
+	{
+		guard::guard(size_t id)
+			: id_(id)
+			, start_(time::get_counter())
+		{ }
+
+		guard::~guard()
+		{
+			time[id_] += time::get_counter() - start_;
+			count[id_] += 1;
+		}
+
+		int release(lua_State* L)
+		{
+			static double frequency = time::get_frequency() / 1000.;
+			double total_time = (time::get_counter() - start) / frequency;
+			double call_time = time[kJassCall] / frequency;
+			double event_time = time[kJassEvent] / frequency;
+			char buf[512];
+			snprintf(buf, sizeof(buf), "total time[%.03fms], call count[%llu] time[%.03fms], event count[%llu] time[%.03fms]"
+				, total_time
+				, (unsigned long long)count[kJassCall]
+				, call_time
+				, (unsigned long long)count[kJassEvent]
+				, event_time
+			);
+			std::string result(buf);
+			start = time::get_counter();
+			time[kJassCall] = 0;
+			count[kJassCall] = 0;
+			time[kJassEvent] = 0;
+			count[kJassEvent] = 0;
+			lua_pushlstring(L, result.data(), result.size());
+			return 1;
+		}
+	}
+
+	int open(lua_State* L)
+	{
+		lua_newtable(L);
+		{
+			lua_newtable(L);
+			{
+				lua_pushstring(L, "__index");
+				lua_pushcclosure(L, jass_runtime_get, 0);
+				lua_rawset(L, -3);
+
+				lua_pushstring(L, "__newindex");
+				lua_pushcclosure(L, jass_runtime_set, 0);
+				lua_rawset(L, -3);
+			}
+			lua_setmetatable(L, -2);
+
+			lua_pushstring(L, "perftrace");
+			lua_pushcclosure(L, perftrace::release, 0);
+			lua_rawset(L, -3);
+		}
+		return 1;
+	}
+
+}

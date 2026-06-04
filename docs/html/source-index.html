@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>源代码索引 · japi.dll</title>
+<style>
+  :root {
+    --bg:#0d1117; --card-bg:#161b22; --border:#30363d; --text:#c9d1d9;
+    --text-dim:#8b949e; --accent:#58a6ff; --green:#3fb950; --orange:#d2991d;
+    --red:#f85149; --code-bg:#0d1117;
+  }
+  * { margin:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .nav { background:var(--card-bg); border-bottom:1px solid var(--border); padding:12px 24px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .nav a { color:var(--accent); text-decoration:none; font-size:0.9em; }
+  .nav a:hover { text-decoration:underline; }
+  .nav .cur { color:var(--text); font-weight:600; }
+  .container { max-width:1000px; margin:0 auto; padding:24px 20px; }
+  h1 { font-size:1.8em; margin-bottom:8px; }
+  h2 { font-size:1.35em; margin:36px 0 14px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+  h3 { font-size:1.1em; margin:22px 0 10px; color:var(--accent); }
+
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:14px 18px; overflow-x:auto; font:12.5px/1.5 "Cascadia Code","Consolas",monospace; margin:12px 0; }
+  code { font:12.5px/1.4 "Cascadia Code","Consolas",monospace; background:rgba(255,255,255,0.06); padding:1px 5px; border-radius:3px; }
+  pre code { background:none; padding:0; }
+
+  .file-card { background:var(--card-bg); border:1px solid var(--border); border-radius:6px; padding:16px 20px; margin:12px 0; }
+  .file-card h3 { margin:0 0 6px; }
+  .file-card h3 code { font-size:1em; background:none; padding:0; }
+  .file-card .meta { color:var(--text-dim); font-size:0.85em; margin-bottom:8px; }
+  .file-card .dep { font-size:0.82em; color:var(--text-dim); }
+  .file-card .dep strong { color:var(--accent); }
+  .file-card .syms { font-size:0.85em; margin-top:6px; color:var(--text); }
+  .file-card .syms code { color:var(--green); }
+
+  .dep-graph { background:var(--card-bg); border:1px solid var(--border); border-radius:8px; padding:24px; margin:16px 0; overflow-x:auto; }
+  .dep-graph svg { max-width:100%; }
+
+  table { width:100%; border-collapse:collapse; margin:14px 0; font-size:0.92em; }
+  th { background:var(--card-bg); padding:9px 12px; text-align:left; border:1px solid var(--border); color:var(--accent); }
+  td { padding:7px 12px; border:1px solid var(--border); }
+  tr:nth-child(even) td { background:rgba(255,255,255,0.015); }
+
+  @media (max-width:700px) { .container { padding:16px 12px; } }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="index.html">← 首页</a>
+  <a href="architecture.html">架构总览</a>
+  <a href="modules.html">Lua 模块</a>
+  <a href="internals.html">VM 内部</a>
+  <a href="build-and-test.html">构建与测试</a>
+  <span class="cur">源码索引</span>
+  <a href="tooling.html">工具链</a>
+</div>
+
+<div class="container">
+
+<h1>📁 源代码索引</h1>
+<p>21 个核心源文件，约 2,900 行 C++ 代码。按目录和职责分组。</p>
+
+<h2>1. 核心源文件（src/src/）</h2>
+
+<div class="file-card">
+<h3><code>dllmain.cpp</code> <span class="meta">29 行 · DLL 入口</span></h3>
+<p>DLL 入口点 + <code>call()</code> 导出。被 callback exploit 调用，串联整个初始化流程。</p>
+<div class="syms">符号: <code>DllMain</code>, <code>call</code> (dllexport)</div>
+<div class="dep">依赖: <code>jass_vm.h</code>, <code>native_registry.h</code> (extern), <code>lua_bootstrap.h</code> (extern)</div>
+</div>
+
+<div class="file-card">
+<h3><code>jass_vm.h</code> + <code>jass_vm.cpp</code> <span class="meta">头 28 行 + 源 333 行 · JASS VM 接口</span></h3>
+<p>PE 扫描器、NativeRegBlock 20 字节模式、1167 个 native 自动发现、VM context 四级指针链、create_string 双 CALL 扫描、string_fake 实现、from_string 实现。</p>
+<div class="syms">符号: <code>Scanner</code>, <code>NativeRegBlock</code>, <code>scan_natives</code>, <code>initialize</code>, <code>find_native</code>, <code>get_native_info</code>, <code>register_native_info</code>, <code>for_each_native</code>, <code>native_count</code>, <code>set_vm_context_from_env</code>, <code>get_vm_context</code>, <code>search_create_string</code>, <code>create_string</code>, <code>g_native_map</code>, <code>g_native_list</code></div>
+<div class="dep">依赖: <code>jass_types.h</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>jass_call.cpp</code> <span class="meta">42 行 · JASS Native 调用</span></h3>
+<p>内联汇编 trampoline：保存 ESP → sub esp 分配 → rep movsd 复制参数 → call eax → 恢复 ESP。通过 ESP 保存/恢复兼容 cdecl/stdcall/thiscall 混合约定。</p>
+<div class="syms">符号: <code>jass::call</code> (uintptr_t func_address, const uintptr_t* params, size_t count)</div>
+<div class="dep">依赖: <code>jass_types.h</code>, <code>jass_vm.h</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>jass_types.h</code> <span class="meta">60 行 · JASS 类型定义</span></h3>
+<p>所有 JASS 类型别名（jinteger_t/jreal_t/jstring_t/jhandle_t 等）、variable_type 枚举、to_real/from_real 位转换、string_fake RAII 类（8×uint32_t 栈上数组模拟 jstring 布局）、from_string 逆向读取。</p>
+<div class="syms">符号: <code>jinteger_t</code>, <code>jreal_t</code>, <code>jstring_t</code>, <code>jhandle_t</code>, <code>variable_type</code>, <code>string_fake</code>, <code>from_string</code>, <code>to_real</code>, <code>from_real</code></div>
+<div class="dep">依赖: 无</div>
+</div>
+
+<div class="file-card">
+<h3><code>native_registry.h</code> + <code>native_registry.cpp</code> <span class="meta">头 13 行 + 源 174 行 · 自定义 Native 注册</span></h3>
+<p>通过 "StringCase" 定位 nfunction_add（__fastcall），注册 3 个测试 native（TestAdd, DebugMsg, SayHello）。SayHello 展示了从自定义 native 调用已有 JASS native 的完整链路（find_native → create_string → call with params → DisplayTimedTextToPlayer）。</p>
+<div class="syms">符号: <code>register_native_t</code>, <code>find_register_native</code>, <code>japi_table_add</code>, <code>init_native_registry</code>, <code>TestAdd</code>, <code>DebugMsg</code>, <code>SayHello</code>, <code>PEScanner</code></div>
+<div class="dep">依赖: <code>jass_vm.h</code>, <code>jass_types.h</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>lua_bootstrap.h</code> + <code>lua_bootstrap.cpp</code> <span class="meta">头 8 行 + 源 345 行 · Lua 引擎引导</span></h3>
+<p>Lua 5.3 状态创建、7 个模块注册（luaL_requiref）、jass.common 模块（metatable __index → 1167 natives）、jass.call()、CallTemp 临时分配器、MPQ 文件读取（Storm.dll ordinal 281）、war3map.lua 加载执行、自定义 print 重定向、dbg_printf 三重输出。</p>
+<div class="syms">符号: <code>init_lua_bootstrap</code>, <code>get_lua_state</code>, <code>dbg_printf</code>, <code>lua_print</code>, <code>jass_index</code>, <code>lua_jass_call</code>, <code>build_params</code>, <code>push_retval</code>, <code>CallTemp</code>, <code>read_mpq_file</code>, <code>luaopen_jass_common</code></div>
+<div class="dep">依赖: <code>lua_runtime.h</code>, <code>lua_japi.h</code>, <code>lua_message.h</code>, <code>lua_slk.h</code>, <code>lua_hook.h</code>, <code>jass_vm.h</code>, <code>jass_types.h</code>, lua.h/lauxlib.h/lualib.h</div>
+</div>
+
+<h2>2. Lua 模块源文件（src/src/）</h2>
+
+<div class="file-card">
+<h3><code>lua_runtime.h</code> + <code>lua_runtime.cpp</code> <span class="meta">头 30 行 + 源 155 行 · jass.runtime</span></h3>
+<p>运行时配置模块。metatable __index/__newindex 属性系统，版本号/error_handle/sleep/console/catch_crash/handle_level。内部辅助：全局表管理（get_global_table 支持 weak kv 模式）、回调表 push/read、handle→ud 映射表。</p>
+<div class="syms">符号: <code>japi::runtime::open</code>, <code>runtime_get</code>, <code>runtime_set</code>, <code>get_err_function</code>, <code>set_err_function</code>, <code>get_global_table</code>, <code>callback_push</code>, <code>callback_read</code>, <code>handle_ud_get_table</code></div>
+<div class="dep">依赖: <code>lua.hpp</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>lua_japi.h</code> + <code>lua_japi.cpp</code> <span class="meta">头 11 行 + 源 478 行 · jass.japi</span></h3>
+<p>运行时 native 注册。14 字节 x86 thunk 生成（push id → call dispatcher → add esp,4 → ret），RWX 页分配器，naked dispatcher 栈帧解析，JASS→Lua 参数转换，lua_pcall 执行，返回值回传，__call/__index/__pairs 三元方法。</p>
+<div class="syms">符号: <code>japi::open_japi</code>, <code>japi_call</code>, <code>japi_index</code>, <code>japi_pairs</code>, <code>japi_dispatcher</code> (naked), <code>japi_dispatch_impl</code>, <code>ThunkCode</code>, <code>ThunkAllocator</code>, <code>JapiNative</code>, <code>parse_param_spec</code></div>
+<div class="dep">依赖: <code>lua_bootstrap.h</code>, <code>lua_runtime.h</code>, <code>jass_vm.h</code>, <code>jass_types.h</code>, <code>native_registry.h</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>lua_message.h</code> + <code>lua_message.cpp</code> <span class="meta">头 11 行 + 源 857 行 · jass.message</span></h3>
+<p>输入系统最大模块（857 行）。GameSections 三区段 PE 扫描器、RTTI vtable 定位器、GetInstance 扫描链、CGameUI vtable hook、键盘/鼠标/技能消息分发、convert_xy 世界坐标转换、object_to_handle 逆查、技能栏按钮查询、三命令调度函数扫描、键盘状态表管理。</p>
+<div class="syms">符号: <code>japi::open_message</code>, <code>GameSections</code>, <code>find_vtable</code>, <code>find_get_instance</code>, <code>get_instance</code>, <code>game_war3</code>, <code>player_local</code>, <code>get_jass_vm</code>, <code>object_to_handle</code>, <code>find_convert_xy</code>, <code>convert_xy</code>, <code>find_get_gameui_fn</code>, <code>get_cgameui</code>, <code>cgameui_filter</code>, <code>cgameui_handler</code>, <code>init_cgameui_hook</code>, <code>order::search</code>, <code>message_mouse</code>, <code>message_selection</code>, <code>message_button</code>, <code>message_order_*</code></div>
+<div class="dep">依赖: <code>lua_bootstrap.h</code>, <code>jass_vm.h</code>, <code>jass_types.h</code>, <code>util/replace_pointer.h</code>, <code>util/memory_protect.h</code>, <code>util/fp_call.h</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>lua_slk.h</code> + <code>lua_slk.cpp</code> <span class="meta">头 11 行 + 源 289 行 · jass.slk</span></h3>
+<p>SLK 数据读取。完整 SLK 格式解析器（C/F/B/E 行类型 + 分号分隔字段 + 类型前缀去除）、Storm.dll MPQ 读取（SFileLoadFileEx ordinal 281）、16 个已知 SLK 文件懒加载、大小写不敏感匹配、结果缓存。</p>
+<div class="syms">符号: <code>japi::open_slk</code>, <code>slk_index</code>, <code>parse_slk</code>, <code>unquote</code>, <code>split_fields</code>, <code>slk_find</code>, <code>load_slk_to_lua</code>, <code>read_mpq_file</code>, <code>SlkSheet</code>, <code>g_slk_files</code></div>
+<div class="dep">依赖: <code>lua_bootstrap.h</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>lua_hook.h</code> + <code>lua_hook.cpp</code> <span class="meta">头 11 行 + 源 366 行 · jass.hook</span></h3>
+<p>JASS native 钩子。与 japi 模块共享 14 字节 thunk 布局（代码重复，待统一），直接修改 NativeInfo.address 实现 hook（而非 nfunction_add 注册），额外传递 orig 函数引用，支持 hook.unhook 恢复。</p>
+<div class="syms">符号: <code>japi::open_hook</code>, <code>hook_call</code>, <code>hook_unhook</code>, <code>hook_dispatcher</code> (naked), <code>hook_dispatch_impl</code>, <code>HookInfo</code>, <code>SimpleThunkAlloc</code></div>
+<div class="dep">依赖: <code>lua_bootstrap.h</code>, <code>jass_vm.h</code>, <code>jass_types.h</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>lua_sleep.h</code> + <code>lua_sleep.cpp</code> <span class="meta">头 18 行 + 源 155 行 · jass.sleep</span></h3>
+<p>协程调度器。32 槽 sleep 队列 + GetTickCount 定时唤醒、lua_yield/lua_resume 实现非阻塞等待、runtime.sleep 门控开关、60 秒超时保护、全局 sleep() 快捷函数。帧泵通过 cgameui_handler 消息钩子驱动（sleep::tick 每帧调用）。</p>
+<div class="syms">符号: <code>japi::sleep::open</code>, <code>japi::sleep::tick</code>, <code>l_sleep</code>, <code>SleepEntry</code>, <code>g_sleep_list</code></div>
+<div class="dep">依赖: <code>lua_bootstrap.h</code>, <code>lua_runtime.h</code></div>
+</div>
+
+<h2>3. 工具类（src/src/util/）</h2>
+
+<div class="file-card">
+<h3><code>fp_call.h</code> <span class="meta">78 行 · 调用约定封装</span></h3>
+<p>模板函数系列：<code>std_call</code>、<code>fast_call</code>、<code>c_call</code>、<code>this_call</code>。自动处理函数指针 reinterpret_cast 和参数类型转换（cast_union 技术保证位宽安全）。被 lua_message.cpp 大量使用。</p>
+<div class="syms">符号: <code>base::std_call</code>, <code>base::fast_call</code>, <code>base::c_call</code>, <code>base::this_call</code>, <code>call_::cast</code>, <code>cast_union</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>memory_protect.h</code> + <code>memory_protect.cpp</code> <span class="meta">头 16 行 + 源 22 行 · 内存保护 RAII</span></h3>
+<p>构造时 VirtualProtect → PAGE_READWRITE，析构时恢复原始保护属性。用于 replace_pointer 前确保目标地址可写。</p>
+<div class="syms">符号: <code>base::hook::detail::memory_protect</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>replace_pointer.h</code> + <code>replace_pointer.cpp</code> <span class="meta">头 7 行 + 源 19 行 · 指针替换</span></h3>
+<p>ReadProcessMemory → WriteProcessMemory → FlushInstructionCache 三步原子指针替换。用于 vtable hook 和任意指针修改。</p>
+<div class="syms">符号: <code>base::hook::replace_pointer</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>mpq_reader.h</code> <span class="meta">46 行 · 共享 MPQ 读取器</span></h3>
+<p>Storm.dll ordinal 281/280 封装，searchScope=1（全 MPQ 搜索），返回 new[] 分配的缓冲区。统一 bootstrap 和 slk 两份重复实现至此头文件。</p>
+<div class="syms">符号: <code>read_mpq_file</code></div>
+<div class="dep">依赖: <code>lua_bootstrap.h</code></div>
+</div>
+
+<div class="file-card">
+<h3><code>horrible_cast.h</code> <span class="meta">19 行 · 类型双关</span></h3>
+<p>union 模板实现函数指针与 uintptr_t 之间的安全转换（类似 std::bit_cast）。被 fp_call.h 内部使用。</p>
+<div class="syms">符号: <code>base::horrible_cast</code>, <code>horrible_union</code></div>
+</div>
+
+<h2>4. 构建文件</h2>
+
+<div class="file-card">
+<h3><code>CMakeLists.txt</code> <span class="meta">91 行</span></h3>
+<p>三目标：lualib（静态库，Lua 5.3.6 全源码编译）、japi（共享库，链接 lualib + /MT 静态 CRT）、lua（独立解释器）。C++17 + C11，Visual Studio 2022 Win32。</p>
+</div>
+
+<div class="file-card">
+<h3><code>build.bat</code> <span class="meta">9 行</span></h3>
+<p>一键编译脚本：调用 vcvars32.bat → cmake → cmake --build Release。</p>
+</div>
+
+<div class="file-card">
+<h3><code>build.ps1</code> <span class="meta">62 行 · 根目录</span></h3>
+<p>打包部署脚本：w3x2lni 解包 original.w3x → 注入 japi.dll/callback/war3map.lua → 重新打包 demo.w3x → 部署到 War3\Maps\Test。</p>
+</div>
+
+<h2>5. 依赖关系图</h2>
+
+<div class="dep-graph">
+<pre><code>dllmain.cpp
+├── jass_vm.h / .cpp ──── jass_types.h (no deps)
+│   └── jass_call.cpp       ← jass_types.h, jass_vm.h
+├── native_registry.h / .cpp ← jass_vm.h, jass_types.h
+└── lua_bootstrap.h / .cpp  ← 全部模块头 + jass_vm.h + lua 5.3 headers
+    ├── lua_runtime.h / .cpp  ← lua.hpp only
+    ├── lua_japi.h / .cpp     ← lua_bootstrap, lua_runtime, jass_vm, native_registry
+    ├── lua_message.h / .cpp  ← lua_bootstrap, jass_vm, util/*
+    ├── lua_slk.h / .cpp      ← lua_bootstrap (standalone + own MPQ reader)
+    └── lua_hook.h / .cpp     ← lua_bootstrap, jass_vm, jass_types
+
+util/
+├── fp_call.h           ← horrible_cast.h
+├── memory_protect.h/.cpp
+├── replace_pointer.h/.cpp ← memory_protect.h
+└── horrible_cast.h     (no deps)</code></pre>
+</div>
+
+<h2>6. 行数统计</h2>
+
+<table>
+<tr><th>类别</th><th>文件数</th><th>总行数</th></tr>
+<tr><td>核心源文件（.h + .cpp）</td><td>12</td><td>~2,200</td></tr>
+<tr><td>工具类（util/*.h + util/*.cpp）</td><td>6</td><td>~170</td></tr>
+<tr><td>构建文件（CMakeLists.txt + build.bat）</td><td>2</td><td>~100</td></tr>
+<tr><td>头文件总计（.h）</td><td>9</td><td>~190</td></tr>
+<tr><td>源文件总计（.cpp）</td><td>11</td><td>~2,680</td></tr>
+<tr><td><strong>合计</strong></td><td><strong>21</strong></td><td><strong>~2,870</strong></td></tr>
+</table>
+
+</div>
+</body>
+</html>

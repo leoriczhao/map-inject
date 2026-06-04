@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JASS VM 内部机制 · japi.dll</title>
+<style>
+  :root {
+    --bg:#0d1117; --card-bg:#161b22; --border:#30363d; --text:#c9d1d9;
+    --text-dim:#8b949e; --accent:#58a6ff; --green:#3fb950; --orange:#d2991d;
+    --red:#f85149; --code-bg:#0d1117; --purple:#bc8cff;
+  }
+  * { margin:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .nav { background:var(--card-bg); border-bottom:1px solid var(--border); padding:12px 24px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .nav a { color:var(--accent); text-decoration:none; font-size:0.9em; }
+  .nav a:hover { text-decoration:underline; }
+  .nav .cur { color:var(--text); font-weight:600; }
+  .container { max-width:1000px; margin:0 auto; padding:24px 20px; }
+  h1 { font-size:1.8em; margin-bottom:8px; }
+  h2 { font-size:1.35em; margin:36px 0 14px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+  h3 { font-size:1.1em; margin:22px 0 10px; color:var(--accent); }
+
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:14px 18px; overflow-x:auto; font:12.5px/1.5 "Cascadia Code","Consolas",monospace; margin:12px 0; }
+  code { font:12.5px/1.4 "Cascadia Code","Consolas",monospace; background:rgba(255,255,255,0.06); padding:1px 5px; border-radius:3px; }
+  pre code { background:none; padding:0; }
+
+  .layout-detail { background:var(--card-bg); border:1px solid var(--border); border-radius:6px; padding:18px 20px; margin:16px 0; }
+  .layout-detail h4 { margin:0 0 10px; color:var(--accent); }
+
+  table { width:100%; border-collapse:collapse; margin:14px 0; font-size:0.92em; }
+  th { background:var(--card-bg); padding:9px 12px; text-align:left; border:1px solid var(--border); color:var(--accent); }
+  td { padding:7px 12px; border:1px solid var(--border); }
+  tr:nth-child(even) td { background:rgba(255,255,255,0.015); }
+
+  .highlight { border-left:3px solid var(--orange); padding-left:12px; margin:12px 0; }
+
+  @media (max-width:700px) { .container { padding:16px 12px; } }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="index.html">← 首页</a>
+  <a href="architecture.html">架构总览</a>
+  <a href="modules.html">Lua 模块</a>
+  <span class="cur">VM 内部</span>
+  <a href="build-and-test.html">构建与测试</a>
+  <a href="source-index.html">源码索引</a>
+  <a href="tooling.html">工具链</a>
+</div>
+
+<div class="container">
+
+<h1>⚙️ JASS VM 内部机制</h1>
+
+<h2>1. PE 段扫描器</h2>
+<p>三个源文件中各有 PE 扫描器实现（不同程度的演化），核心结构一致：</p>
+
+<div class="layout-detail">
+<h4>Scanner 结构（jass_vm.cpp:67）</h4>
+<pre><code>struct Scanner {
+    uint8_t* base;        // game.dll 基址
+    uint8_t* rdata_beg;   // .rdata 段起始
+    uint32_t rdata_sz;    // .rdata 段大小
+    uint8_t* text_beg;    // .text 段起始
+    uint32_t text_sz;     // .text 段大小
+
+    bool init(HMODULE mod);     // 解析 PE 头，定位段
+    uintptr_t find_string_in_rdata(const char* str, size_t len) const;
+    uintptr_t find_dword_in_text(uint32_t value) const;
+    uintptr_t search_string(const char* str) const;
+    // search_string = 在 .rdata 找字符串 → 在 .text 找引用该字符串的 DWORD
+};</code></pre>
+</div>
+
+<p><strong>三个扫描器版本：</strong></p>
+<table>
+<tr><th>文件</th><th>结构体</th><th>特点</th></tr>
+<tr><td><code>jass_vm.cpp</code></td><td><code>Scanner</code></td><td>.rdata + .text 两段，基础版本</td></tr>
+<tr><td><code>native_registry.cpp</code></td><td><code>PEScanner</code></td><td>增加 <code>convert_function</code>（E8 相对调用解析）</td></tr>
+<tr><td><code>lua_message.cpp</code></td><td><code>GameSections</code></td><td>.rdata + .text + <strong>.data</strong> 三段，最完整版本</td></tr>
+</table>
+<p style="color:var(--text-dim);font-size:0.9em">三个扫描器的重复代码将在 Goal 7（代码质量）中统一到 util/。</p>
+
+<h2>2. Native 扫描：NativeRegBlock 20 字节模式</h2>
+
+<p>每个 JASS native 在 game.dll 的 <code>.text</code> 段中有对应的 20 字节注册代码块：</p>
+
+<div class="layout-detail">
+<h4>NativeRegBlock 内存布局（jass_vm.cpp:116）</h4>
+<pre><code>#pragma pack(push, 1)
+struct NativeRegBlock {
+    uint8_t  push_op;       // 0x68          — PUSH opcode
+    uint32_t param_ptr;     // → .rdata     — 参数字符串指针 "(II)I"
+    uint8_t  mov_edx;       // 0xBA          — MOV EDX opcode
+    uint32_t name_ptr;      // → .rdata     — native 名称字符串指针 "Deg2Rad"
+    uint8_t  mov_ecx;       // 0xB9          — MOV ECX opcode
+    uint32_t func_addr;     // → .text      — native 函数地址
+    uint8_t  call_op;       // 0xE8          — CALL opcode
+    uint32_t call_rel;      // rel32         — 相对偏移到 nfunction_add
+
+    bool verify() const {
+        return push_op == 0x68 && mov_edx == 0xBA
+            && mov_ecx == 0xB9 && call_op == 0xE8;
+    }
+};
+#pragma pack(pop)</code></pre>
+</div>
+
+<h3>等价的 x86 汇编</h3>
+<pre><code>68 XX XX XX XX    push  param_str_ptr     ; 参数规格字符串
+BA XX XX XX XX    mov   edx, name_ptr      ; native 名称
+B9 XX XX XX XX    mov   ecx, func_addr     ; native 函数地址
+E8 XX XX XX XX    call  nfunction_add     ; 注册到 JASS VM</code></pre>
+
+<h3>扫描过程（scan_natives, L139）</h3>
+<ol>
+<li><code>s.search_string("Deg2Rad")</code> — 在 .rdata 找 "Deg2Rad"，再在 .text 找引用它的 DWORD</li>
+<li><code>block = (NativeRegBlock*)(ref - 6)</code> — 向前偏移 6 字节定位到 NativeRegBlock 起始（DWORD 引用的位置在 <code>mov edx, name_ptr</code> 指令的第 2-5 字节）</li>
+<li><code>block->verify()</code> — 验证 20 字节魔数</li>
+<li><code>while (block->verify()) { ... block++; }</code> — 顺序遍历所有连续的注册块，提取 name/address/param</li>
+<li>保护：<code>if (count > 10000) break</code></li>
+</ol>
+
+<h3>扫描结果</h3>
+<p>当前扫描到 <strong>1167 个 JASS natives</strong>，存储在 <code>g_native_map</code>（name → NativeInfo）和 <code>g_native_list</code>（顺序列表）中。通过 <code>find_native(name)</code>、<code>get_native_info(name)</code>、<code>for_each_native(cb)</code> 访问。</p>
+
+<h2>3. VM Context 建立</h2>
+
+<div class="layout-detail">
+<h4>set_vm_context_from_env（jass_vm.cpp:229）</h4>
+<pre><code>void set_vm_context_from_env(uintptr_t pJassEnvAddress_bytes) {
+    __try {
+        uintptr_t v1 = *(uint32_t*)pJassEnvAddress_bytes;  // [pJassEnvAddress]
+        uintptr_t v2 = *(uint32_t*)(v1 + 20);               // [v1 + 20]
+        uintptr_t v3 = *(uint32_t*)(v2 + 144);              // [v2 + 144]
+        g_VMContext = *(uint32_t*)(v3 + 4);                 // [v3 + 4]
+    } __except (EXCEPTION_EXECUTE_HANDLER) { ... }
+}</code></pre>
+</div>
+
+<p><strong>四级指针链：</strong> <code>[[[game.dll + 0xBE3740] + 0x14] + 0x90] + 0x04</code></p>
+<p>等价于 callback 中的 <code>GetJassContext(1)</code>。所有 JASS native 调用都需要 VM context 作为 <code>ecx</code>（thiscall 风格的 this 指针）。SEH 异常处理确保指针链中任一级为 NULL 时不会崩溃。</p>
+
+<h2>4. Native 调用 Trampoline</h2>
+
+<div class="layout-detail">
+<h4>jass::call（jass_call.cpp:10）</h4>
+<pre><code>uintptr_t call(uintptr_t func_address, const uintptr_t* param_list, size_t count) {
+    uintptr_t retval = 0;
+    size_t param_size = count * sizeof(uintptr_t);
+    uintptr_t vm_ctx = vm::get_vm_context();
+    uintptr_t saved_esp = 0;
+
+    __asm {
+        mov  eax, func_address    ; 目标函数
+        mov  edx, vm_ctx          ; JASS VM context → ecx (thiscall this)
+        mov  saved_esp, esp       ; ★ 保存原始 ESP
+
+        sub  esp, param_size      ; 分配参数空间
+        mov  edi, esp             ; 目标 = 栈顶
+        mov  esi, param_list      ; 源 = 参数数组
+        mov  ecx, count           ; 计数
+        cld
+        rep  movsd                ; 复制参数到栈
+
+        mov  ecx, edx             ; VM context = this 指针
+        call eax                  ; 调用 native
+        mov  retval, eax          ; 保存返回值
+
+        mov  esp, saved_esp       ; ★ 恢复 ESP（兼容 cdecl/stdcall/thiscall）
+    }
+    return retval;
+}</code></pre>
+</div>
+
+<div class="highlight">
+<strong>关键设计：ESP 保存/恢复。</strong> JASS natives 使用混合调用约定（<code>__cdecl</code>/<code>__stdcall</code>/<code>__thiscall</code>），callee 的栈清理量不确定。通过保存调用前的 ESP 并在返回后恢复，无论 native 使用哪种约定都能正确返回。参数通过 <code>sub esp</code> 分配 + <code>rep movsd</code> 复制。
+</div>
+
+<h2>5. fake jstring 内存布局</h2>
+
+<div class="layout-detail">
+<h4>string_fake（jass_types.h:42）+ from_string（jass_vm.cpp:56）</h4>
+<pre><code>class string_fake {
+    uint32_t memory_[8];  // 32 字节栈上数组
+public:
+    string_fake(const char* str) {
+        memory_[2] = (uint32_t)&memory_[0];  // [outer+8] = &outer (自引用)
+        memory_[7] = (uint32_t)&str[0];      // [outer+28] = C 字符串指针
+    }
+    operator jstring_t() const { return (jstring_t)memory_; }
+};
+
+// 逆向读取：还原 C 字符串
+const char* from_string(jstring_t val) {
+    val = *(uint32_t*)((uint32_t)val + 8);   // 解引用自引用
+    return (const char*)(*(uint32_t*)(val + 28));  // 读字符串指针
+}</code></pre>
+</div>
+
+<h3>内存示意图</h3>
+<pre><code>jstring_t (outer)                    inner (memory_[0..7])
+┌──────────────┐                    ┌───┬───┬───┬───┬───┬───┬───┬───┐
+│ memory_[0]   │ 0x00               │ 0   0   0   0   0   0   0   0  │
+│ memory_[1]   │ 0x04               │   ... padding + nulls ...      │
+│ memory_[2] ──┼──→ &memory_[0]     │         ↑ 自引用               │
+│ memory_[3]   │ 0x0C               │                               │
+│ memory_[4]   │ 0x10               ├───┬───┬───┬───┬───┬───┬───┬───┤
+│ memory_[5]   │ 0x14               │              ...               │
+│ memory_[6]   │ 0x18               │                               │
+│ memory_[7] ──┼──→ C string ptr   │         → "Hello World\0"      │
+└──────────────┘ 0x1C               └───────────────────────────────┘
+                                      0x00              0x1C (28)
+</code></pre>
+
+<h3>create_string（真字符串分配器）</h3>
+<p>通过 "I2S" native 的引用链在 game.dll 中定位真正的字符串分配器（<code>jass_vm.cpp:258-330</code>）：</p>
+<ol>
+<li><code>search_string("I2S")</code> → 找到 .text 中引用 "I2S" 的位置</li>
+<li>跳过 push 指令（5 字节）</li>
+<li>找第一个 CALL (E8) → 第一个辅助函数</li>
+<li>跳过第一个 CALL（5 字节）</li>
+<li>找第二个 CALL (E8) → <code>create_string</code></li>
+<li>解析相对地址：<code>target = addr + 5 + rel32</code></li>
+</ol>
+<p>签名：<code>__fastcall jstring_t create_string(const char* str)</code>，用于需要持久生命周期的字符串。</p>
+
+<h2>6. x86 Thunk 生成</h2>
+
+<div class="layout-detail">
+<h4>ThunkCode（lua_japi.cpp:24，lua_hook.cpp:32 重复）</h4>
+<pre><code>#pragma pack(push, 1)
+struct ThunkCode {                    // 共 14 字节
+    uint8_t  push_op;      // 0x68
+    uint32_t native_id;    // 唯一标识符（或 hook_id）
+    uint8_t  call_op;      // 0xE8
+    uint32_t call_rel;     // 相对偏移 = dispatcher - (thunk + 10)
+    uint8_t  add_esp[3];   // 0x83 0xC4 0x04
+    uint8_t  ret_op;       // 0xC3
+};
+#pragma pack(pop)
+static_assert(sizeof(ThunkCode) == 14, "ThunkCode must be 14 bytes");</code></pre>
+</div>
+
+<p><strong>Thunk 作用：</strong> 为每个注册的 JAPI native 提供唯一的入口点。JASS VM 调用 thunk → thunk push native_id → thunk call dispatcher → dispatcher 查表 → 调用 Lua 回调。</p>
+
+<p><strong>分配器</strong>（<code>ThunkAllocator</code>, lua_japi.cpp:51）：<code>VirtualAlloc(PAGE_EXECUTE_READWRITE)</code> 分配 4KB RWX 页，thunk 紧密排列（每个 14 字节），页满后分配新页。通过 <code>call_rel</code> 字段在分配后修正相对偏移。</p>
+
+<h2>7. Naked Dispatcher 栈帧布局</h2>
+
+<pre><code>JASS VM 调用 thunk 时的栈布局：
+                              ┌──────────────────────┐
+                              │ jass_param[2]  ...    │ ← 高地址
+                              │ jass_param[1] ...     │
+                              │ jass_param[0] ...     │ ← [ebp+0x10]
+                              │ ret_to_vm             │ ← [ebp+0x0C] JASS VM 返回地址
+thunk:  push native_id  ──→   │ native_id             │ ← [ebp+0x08]
+        call dispatcher ──→   │ ret_to_thunk          │ ← [ebp+0x04] call 压入
+dispatcher: push ebp    ──→   │ saved_ebp             │ ← [ebp+0x00]
+                              └──────────────────────┘
+                                  ↑ japi_dispatcher(L189) 从此读取参数
+</code></pre>
+
+<h2>8. nfunction_add 定位</h2>
+
+<p><code>native_registry.cpp:78-84</code> — 使用 "StringCase" native 注册块定位 <code>nfunction_add</code>：</p>
+<ol>
+<li><code>search_string("StringCase")</code> → 在 .text 中找到引用 "StringCase" 的指令地址</li>
+<li><code>ptr += 9</code> → 跳过 push(5) + mov edx(5) = 10 字节…… 实际是跳过到 CALL 指令处</li>
+<li><code>convert_function(ptr)</code> → 解析 E8 相对调用，得到 <code>nfunction_add</code> 的绝对地址</li>
+</ol>
+
+<div class="highlight">
+<strong>为什么选 "StringCase"？</strong> 这是一个普通的 JASS native，其注册块中的 <code>call nfunction_add</code> 指令指向所有 native 共用的同一个注册函数。任何一个 native 都可以用来定位它。
+</div>
+
+<h2>9. 工具类速查</h2>
+
+<table>
+<tr><th>文件</th><th>关键符号</th><th>用途</th></tr>
+<tr><td><code>util/fp_call.h</code></td><td><code>std_call</code>, <code>fast_call</code>, <code>c_call</code>, <code>this_call</code></td><td>类型安全的调用约定封装模板，自动处理函数指针类型转换和参数位宽匹配</td></tr>
+<tr><td><code>util/memory_protect.h/.cpp</code></td><td><code>memory_protect</code></td><td>RAII VirtualProtect 包装器：构造时设为 PAGE_READWRITE，析构时恢复</td></tr>
+<tr><td><code>util/replace_pointer.h/.cpp</code></td><td><code>replace_pointer</code></td><td>原子指针替换：ReadProcessMemory → WriteProcessMemory → FlushInstructionCache</td></tr>
+<tr><td><code>util/horrible_cast.h</code></td><td><code>horrible_cast</code></td><td>类型双关 union 模板（类似 <code>std::bit_cast</code>，但兼容 C++17 之前）</td></tr>
+</table>
+
+</div>
+</body>
+</html>

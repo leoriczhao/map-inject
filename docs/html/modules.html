@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lua 模块详解 · japi.dll</title>
+<style>
+  :root {
+    --bg:#0d1117; --card-bg:#161b22; --border:#30363d; --text:#c9d1d9;
+    --text-dim:#8b949e; --accent:#58a6ff; --green:#3fb950; --orange:#d2991d;
+    --red:#f85149; --code-bg:#0d1117; --purple:#bc8cff;
+  }
+  * { margin:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .nav { background:var(--card-bg); border-bottom:1px solid var(--border); padding:12px 24px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .nav a { color:var(--accent); text-decoration:none; font-size:0.9em; }
+  .nav a:hover { text-decoration:underline; }
+  .nav .cur { color:var(--text); font-weight:600; }
+  .container { max-width:1000px; margin:0 auto; padding:24px 20px; }
+  h1 { font-size:1.8em; margin-bottom:8px; }
+  h2 { font-size:1.35em; margin:36px 0 14px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+  h3 { font-size:1.1em; margin:22px 0 10px; color:var(--accent); }
+
+  .module-card { background:var(--card-bg); border:1px solid var(--border); border-radius:8px; padding:24px; margin:20px 0; }
+  .module-card h2 { margin-top:0; border-bottom:1px solid var(--border); }
+  .module-card h2 .tag { font-size:0.6em; padding:3px 8px; border-radius:4px; vertical-align:middle; margin-left:8px; }
+  .tag-c { background:#1a3a5c; color:#58a6ff; }
+  .tag-l { background:#1a3a2a; color:#3fb950; }
+
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:14px 18px; overflow-x:auto; font:12.5px/1.5 "Cascadia Code","Consolas",monospace; margin:12px 0; }
+  code { font:12.5px/1.4 "Cascadia Code","Consolas",monospace; background:rgba(255,255,255,0.06); padding:1px 5px; border-radius:3px; }
+  pre code { background:none; padding:0; }
+
+  table { width:100%; border-collapse:collapse; margin:14px 0; font-size:0.92em; }
+  th { background:var(--card-bg); padding:9px 12px; text-align:left; border:1px solid var(--border); color:var(--accent); }
+  td { padding:7px 12px; border:1px solid var(--border); }
+  tr:nth-child(even) td { background:rgba(255,255,255,0.015); }
+  td:first-child code { color:var(--green); }
+
+  .api-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:12px; margin:12px 0; }
+  .api-item { background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:6px; padding:12px 14px; }
+  .api-item .sig { font-weight:600; color:var(--accent); font-size:0.95em; }
+  .api-item .desc { color:var(--text-dim); font-size:0.85em; margin-top:4px; }
+
+  @media (max-width:700px) { .container { padding:16px 12px; } .api-grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="index.html">← 首页</a>
+  <a href="architecture.html">架构总览</a>
+  <span class="cur">Lua 模块</span>
+  <a href="internals.html">VM 内部</a>
+  <a href="build-and-test.html">构建与测试</a>
+  <a href="source-index.html">源码索引</a>
+  <a href="tooling.html">工具链</a>
+</div>
+
+<div class="container">
+
+<h1>🧩 jass.* 模块详解</h1>
+<p>japi.dll 提供 6 个 Lua 预加载模块，通过 <code>luaL_requiref</code> 注册（<code>lua_bootstrap.cpp:309-325</code>），对齐内置 JAPI 的五模块结构。</p>
+
+<!-- ============================================================ -->
+<div class="module-card">
+<h2>1. jass.common <span class="tag tag-c">lua_bootstrap.cpp</span></h2>
+<p>JASS native 调用的核心模块。用户通过 <code>require "jass.common"</code> 获得 <code>jass</code> 表，所有 1167 个 JASS natives 通过 metatable <code>__index</code> 自动映射。</p>
+
+<h3>API 速查</h3>
+<div class="api-grid">
+<div class="api-item"><div class="sig">jass.NativeName(args)</div><div class="desc">直接调用任意 JASS native（metatable __index）</div></div>
+<div class="api-item"><div class="sig">jass.call(name, ...)</div><div class="desc">显式调用 JASS native（jass_call 函数）</div></div>
+</div>
+
+<h3>实现原理</h3>
+<ol>
+<li>创建 <code>jass</code> 全局 table（<code>luaopen_jass_common</code>, L263）</li>
+<li>设置 metatable <code>__index</code> → <code>jass_index</code> 函数</li>
+<li><code>jass_index</code>（L191）：接收属性名 → 查 <code>g_native_map</code> → 返回 wrapper C closure</li>
+<li>Wrapper closure 持有 <code>native_name</code> 和 <code>NativeInfo*</code> 作为 upvalue</li>
+<li>调用时 <code>build_params</code>（L83）解析参数字符串（如 <code>"(Hplayer;RRRS)V"</code>）并转换 Lua 值 → JASS 类型</li>
+<li><code>jass::call</code>（jass_call.cpp）执行实际的 x86 调用</li>
+<li><code>push_retval</code> 将 JASS 返回值推回 Lua 栈</li>
+</ol>
+
+<h3>参数字符串语法</h3>
+<table>
+<tr><th>格式</th><th>示例</th><th>说明</th></tr>
+<tr><td><code>(II)I</code></td><td>两个 int，返回 int</td><td>I=integer, R=real, S=string, B=boolean, H=handle, C=code, V=void</td></tr>
+<tr><td><code>(Hplayer;RRRS)V</code></td><td>handle, 3 real, string → void</td><td>分号分隔，小写后缀为描述（忽略）</td></tr>
+<tr><td><code>(S)S</code></td><td>一个 string，返回 string</td><td>字符串通过 string_fake 传递</td></tr>
+</table>
+
+<h3>Lua 使用示例</h3>
+<pre><code>local jass = require "jass.common"
+
+-- 方式 1: 直接属性访问（metatable __index）
+local player = jass.GetLocalPlayer()
+jass.DisplayTimedTextToPlayer(player, 0, 0, 10, "Hello from Lua!")
+
+-- 方式 2: 显式调用
+local p2 = jass.call("GetLocalPlayer")
+jass.call("DisplayTimedTextToPlayer", player, 0, 0, 10, "Via call()")</code></pre>
+
+<h3>关键源文件</h3>
+<table>
+<tr><th>文件</th><th>关键符号</th></tr>
+<tr><td><code>lua_bootstrap.cpp</code></td><td><code>luaopen_jass_common</code>(L263), <code>jass_index</code>(L191), <code>lua_jass_call</code>(L154), <code>build_params</code>(L83), <code>push_retval</code>(L126), <code>CallTemp</code>(L69)</td></tr>
+<tr><td><code>jass_call.cpp</code></td><td><code>jass::call</code>(L10) — 内联汇编 trampoline</td></tr>
+<tr><td><code>jass_types.h</code></td><td><code>string_fake</code>(L42), <code>from_string</code>(L58), <code>jreal_t</code>/<code>jstring_t</code> 等类型别名</td></tr>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<div class="module-card">
+<h2>2. jass.runtime <span class="tag tag-c">lua_runtime.cpp</span></h2>
+<p>运行时配置模块。通过 metatable <code>__index</code>/<code>__newindex</code> 暴露可读写属性。</p>
+
+<h3>属性速查</h3>
+<table>
+<tr><th>属性</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+<tr><td><code>runtime.version</code></td><td>string (只读)</td><td>"1.0.0.0"</td><td>japi.dll 版本号</td></tr>
+<tr><td><code>runtime.error_handle</code></td><td>function|nil</td><td>nil</td><td>Lua error handler（注册到 LUA_REGISTRYINDEX）</td></tr>
+<tr><td><code>runtime.handle_level</code></td><td>integer</td><td>2</td><td>handle 表现层级</td></tr>
+<tr><td><code>runtime.console</code></td><td>boolean</td><td>false</td><td>控制台开关</td></tr>
+<tr><td><code>runtime.sleep</code></td><td>boolean</td><td>false</td><td>协程 sleep 开关（当前由 Goal 5 实现）</td></tr>
+<tr><td><code>runtime.can_sleep</code></td><td>boolean (只读)</td><td>false</td><td>sleep && lua_isyieldable(L)</td></tr>
+<tr><td><code>runtime.catch_crash</code></td><td>boolean</td><td>true</td><td>崩溃捕获开关</td></tr>
+</table>
+
+<h3>内部辅助函数</h3>
+<div class="api-grid">
+<div class="api-item"><div class="sig">get_global_table(L, name, weak)</div><div class="desc">获取或创建注册表全局表（支持弱引用 kv 模式）</div></div>
+<div class="api-item"><div class="sig">callback_push/read(L)</div><div class="desc">回调表的 push（返回序号）和 read（按序号取出）</div></div>
+<div class="api-item"><div class="sig">handle_ud_get_table(L)</div><div class="desc">获取 handle→userdata 映射表（弱引用 kv）</div></div>
+</div>
+
+<h3>Lua 使用示例</h3>
+<pre><code>local runtime = require "jass.runtime"
+
+runtime.error_handle = function(msg)
+    print("[ERROR] " .. msg)
+    return msg
+end
+
+print(runtime.version)      -- "1.0.0.0"
+runtime.sleep = false        -- 协程 sleep 未启用
+print(runtime.can_sleep)     -- false</code></pre>
+
+<h3>关键源文件</h3>
+<table>
+<tr><td><code>lua_runtime.cpp</code></td><td><code>open</code>(L142), <code>runtime_get</code>(L90), <code>runtime_set</code>(L124), <code>set_err_function</code>(L21), <code>get_global_table</code>(L34), <code>callback_push</code>(L60), <code>callback_read</code>(L81)</td></tr>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<div class="module-card">
+<h2>3. jass.japi <span class="tag tag-c">lua_japi.cpp</span></h2>
+<p>运行时 JASS native 注册模块。允许 Lua 侧动态注册新的 JASS native 函数，这些 native 在 JASS 代码中可直接调用。</p>
+
+<h3>API 速查</h3>
+<div class="api-grid">
+<div class="api-item"><div class="sig">japi("name", "def", fn)</div><div class="desc">注册新 JASS native（__call 元方法）</div></div>
+<div class="api-item"><div class="sig">japi.NativeName(args)</div><div class="desc">调用已注册 native（__index 元方法）</div></div>
+<div class="api-item"><div class="sig">pairs(japi)</div><div class="desc">遍历所有已注册 native（__pairs 元方法）</div></div>
+</div>
+
+<h3>实现原理（三层架构）</h3>
+
+<h4>第 1 层：x86 Thunk（14 字节）</h4>
+<p>每当 <code>japi("name", "def", fn)</code> 被调用时（<code>lua_japi.cpp:366</code>），生成一段 14 字节的可执行代码：</p>
+<pre><code>68 xx xx xx xx    push &lt;native_id&gt;      ; 标识这个 native
+E8 xx xx xx xx    call &lt;dispatcher&gt;      ; 跳转到统一分发器
+83 C4 04          add esp, 4             ; 清理 push
+C3                ret                    ; 返回 JASS VM</code></pre>
+<p>Thunk 通过 <code>ThunkAllocator</code>（L51）分配在 <code>VirtualAlloc(PAGE_EXECUTE_READWRITE)</code> 的 RWX 页上。</p>
+
+<h4>第 2 层：Naked Dispatcher（x86 汇编）</h4>
+<p><code>japi_dispatcher</code>（L189）是裸函数：</p>
+<ol>
+<li>保存 ebp, ecx, edx</li>
+<li>从栈上读取 <code>native_id</code> 和 <code>jass_param[]</code> 指针</li>
+<li>调用 C++ 函数 <code>japi_dispatch_impl(native_id, params)</code></li>
+<li>返回后恢复寄存器，<code>ret</code> 回到 JASS VM</li>
+</ol>
+
+<h4>第 3 层：C++ Dispatch Impl</h4>
+<p><code>japi_dispatch_impl</code>（L90）：</p>
+<ol>
+<li>从 <code>g_japi_by_id</code> 查找 native 信息</li>
+<li>从 <code>LUA_REGISTRYINDEX</code> 取出 Lua 回调函数</li>
+<li>根据参数类型（INTEGER/REAL/STRING/BOOLEAN/HANDLE/CODE）将 JASS 参数推入 Lua 栈</li>
+<li><code>lua_pcall(L, nparams, 1, 0)</code> 执行 Lua 回调</li>
+<li>根据返回类型读取返回值并返回给 JASS</li>
+</ol>
+
+<h3>Lua 使用示例</h3>
+<pre><code>local japi = require "jass.japi"
+
+-- 注册一个新 native：TestJapiAdd(II)I
+japi("TestJapiAdd", "(II)I", function(a, b)
+    return a + b
+end)
+
+-- JASS 侧现在可以调用: call TestJapiAdd(10, 32) → 42
+-- Lua 侧也可以直接调用:
+local result = japi.TestJapiAdd(10, 32)  -- 42
+
+-- 遍历已注册 native
+for _, v in pairs(japi) do
+    print(v.name, v.def, v.thunk)
+end</code></pre>
+
+<h3>关键源文件</h3>
+<table>
+<tr><td><code>lua_japi.cpp</code></td><td><code>open_japi</code>(L464), <code>japi_call</code>(L366), <code>japi_index</code>(L256), <code>japi_pairs</code>(L439), <code>japi_dispatcher</code>(L189), <code>japi_dispatch_impl</code>(L90), <code>ThunkCode</code>(L24), <code>ThunkAllocator</code>(L51), <code>parse_param_spec</code>(L215)</td></tr>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<div class="module-card">
+<h2>4. jass.message <span class="tag tag-c">lua_message.cpp</span> <span style="color:var(--orange)">~857 行，最大模块</span></h2>
+<p>输入系统模块。通过 hook CGameUI 的 vtable 拦截键盘/鼠标消息，并提供世界坐标转换、选中单位查询、技能栏查询和命令发布功能。</p>
+
+<h3>API 速查</h3>
+<div class="api-grid">
+<div class="api-item"><div class="sig">message.mouse() → wx, wy</div><div class="desc">当前鼠标世界坐标（优先缓存，fallback convert_xy）</div></div>
+<div class="api-item"><div class="sig">message.selection() → handle</div><div class="desc">当前选中单位 handle（或 nil）</div></div>
+<div class="api-item"><div class="sig">message.button(x, y) → id, order, target_type</div><div class="desc">技能栏按钮查询（x:0-3, y:0-2）</div></div>
+<div class="api-item"><div class="sig">message.keyboard[code]</div><div class="desc">键盘状态表（整数键码 → true/false）</div></div>
+<div class="api-item"><div class="sig">message.hook = fn</div><div class="desc">设置/清除消息回调</div></div>
+<div class="api-item"><div class="sig">message.order_immediate(order, flags)</div><div class="desc">无目标命令</div></div>
+<div class="api-item"><div class="sig">message.order_point(order, x, y, flags)</div><div class="desc">点目标命令</div></div>
+<div class="api-item"><div class="sig">message.order_target(order, x, y, target, flags)</div><div class="desc">单位目标命令</div></div>
+<div class="api-item"><div class="sig">message.order_enable_debug(en)</div><div class="desc">启用/禁用命令调试日志（true=开启, false=关闭）</div></div>
+</div>
+
+<h3>消息类型枚举</h3>
+<table>
+<tr><th>常量</th><th>值</th><th>说明</th></tr>
+<tr><td><code>MSG_KEY_DOWN</code></td><td><code>0x40060064</code></td><td>键盘按下</td></tr>
+<tr><td><code>MSG_KEY_UP</code></td><td><code>0x40060066</code></td><td>键盘释放</td></tr>
+<tr><td><code>MSG_MOUSE_DOWN</code></td><td><code>0x1A0068</code></td><td>鼠标按下（含世界坐标+屏幕坐标）</td></tr>
+<tr><td><code>MSG_MOUSE_UP</code></td><td><code>0x400500C9</code></td><td>鼠标释放（无坐标数据）</td></tr>
+<tr><td><code>MSG_ABILITY_MOUSE</code></td><td><code>0x30064</code></td><td>技能鼠标事件</td></tr>
+</table>
+
+<h3>Hook 消息格式</h3>
+<pre><code>-- 键盘事件
+{ type="key_down"|"key_up", category="keyboard", code=keycode, keystate=state, msgid=raw_id }
+
+-- 鼠标事件
+{ type="mouse_down", category="mouse", wx=world_x, wy=world_y, rx=screen_x, ry=screen_y, code=button, msgid=raw_id }
+{ type="mouse_up",   category="mouse", msgid=raw_id }
+{ type="mouse_ability", category="ability", msgid=raw_id }
+
+-- 回调签名
+message.hook = function(msg)
+    -- msg.type, msg.category, msg.code, msg.wx, msg.wy, ...
+    return true   -- true = 继续传递事件, false = 拦截
+end</code></pre>
+
+<h3>实现原理</h3>
+<ol>
+<li><strong>CGameUI vtable hook</strong>（<code>init_cgameui_hook</code>, L816）：通过 RTTI 字符串 <code>".?AVCGameUI@@"</code> 定位 CGameUI vtable，用 <code>replace_pointer</code> 将 <code>vtable[4]</code> 替换为 <code>cgameui_handler</code></li>
+<li><strong>消息分发</strong>（<code>cgameui_filter</code>, L498）：解析消息结构体，提取 keycode/坐标/按钮数据，组装 Lua table，调用用户回调</li>
+<li><strong>convert_xy</strong>（L386）：通过 CWorldFrameWar3 vtable[14] 定位坐标转换函数，将屏幕坐标转为世界坐标</li>
+<li><strong>对象→handle 逆查</strong>（<code>object_to_handle</code>, L255）：遍历 JASS VM 的 handle_table reverse_table，通过 object 指针反查 handle 值</li>
+<li><strong>命令调度</strong>（L710-746）：从 <code>game.dll + 0x3AE4E0</code> 扫描 4 个 CALL 指令，分别定位 immediate_order / point_order / target_order 函数</li>
+</ol>
+
+<h3>Lua 使用示例</h3>
+<pre><code>local message = require "jass.message"
+
+-- 键盘 hook
+message.hook = function(msg)
+    if msg.type == "key_down" then
+        print(string.format("Key pressed: 0x%02X state=%d", msg.code, msg.keystate))
+        if msg.code == 0x1B then  -- ESC
+            message.hook = nil
+        end
+    end
+    return true
+end
+
+-- 查询当前鼠标世界坐标
+local wx, wy = message.mouse()
+
+-- 查询选中单位
+local unit_handle = message.selection()
+
+-- 技能栏按钮（右上角按钮 = x=3, y=0）
+local ability_id, order_id, target_type = message.button(3, 0)
+
+-- 发布命令
+message.order_point(0xD000F, 0, 0, 0)  -- smart 到原点</code></pre>
+
+<h3>关键源文件</h3>
+<table>
+<tr><td><code>lua_message.cpp</code></td><td><code>open_message</code>(L837), <code>cgameui_filter</code>(L498), <code>init_cgameui_hook</code>(L816), <code>find_vtable</code>(L122), <code>find_get_instance</code>(L159), <code>get_instance</code>(L201), <code>object_to_handle</code>(L255), <code>find_convert_xy</code>(L322), <code>convert_xy</code>(L386), <code>find_get_gameui_fn</code>(L289), <code>order::search</code>(L430)</td></tr>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<div class="module-card">
+<h2>5. jass.slk <span class="tag tag-c">lua_slk.cpp</span></h2>
+<p>SLK（Script Language Kit）数据读取模块。提供 Warcraft III 游戏数据表（AbilityData, UnitData, ItemData 等）的懒加载访问。</p>
+
+<h3>API 速查</h3>
+<div class="api-grid">
+<div class="api-item"><div class="sig">slk.ability["id"] → table</div><div class="desc">读取 AbilityData.slk 中指定 ID 的行</div></div>
+<div class="api-item"><div class="sig">slk.unit["id"] → table</div><div class="desc">读取 UnitData.slk</div></div>
+<div class="api-item"><div class="sig">slk.item["id"] → table</div><div class="desc">读取 ItemData.slk</div></div>
+<div class="api-item"><div class="sig">slk.buff / .upgrade / .doodad / ...</div><div class="desc">共 16 个已知 SLK 文件</div></div>
+</div>
+
+<h3>已知 SLK 文件映射</h3>
+<table>
+<tr><th>Lua 键</th><th>MPQ 路径</th><th>说明</th></tr>
+<tr><td><code>ability</code></td><td><code>Units\AbilityData.slk</code></td><td>技能数据</td></tr>
+<tr><td><code>unit</code></td><td><code>Units\UnitData.slk</code></td><td>单位数据</td></tr>
+<tr><td><code>item</code></td><td><code>Units\ItemData.slk</code></td><td>物品数据</td></tr>
+<tr><td><code>destructable</code></td><td><code>Units\DestructableData.slk</code></td><td>可破坏物数据</td></tr>
+<tr><td><code>doodad</code></td><td><code>Doodads\Doodads.slk</code></td><td>装饰物数据</td></tr>
+<tr><td><code>buff</code></td><td><code>Units\AbilityBuffData.slk</code></td><td>Buff 数据</td></tr>
+<tr><td><code>upgrade</code></td><td><code>Units\UpgradeData.slk</code></td><td>科技数据</td></tr>
+<tr><td><code>unitabilities</code></td><td><code>Units\UnitAbilities.slk</code></td><td>单位技能</td></tr>
+<tr><td><code>unitbalance</code></td><td><code>Units\UnitBalance.slk</code></td><td>单位平衡</td></tr>
+<tr><td><code>unitUI</code></td><td><code>Units\UnitUI.slk</code></td><td>单位 UI</td></tr>
+<tr><td><code>unitweapons</code></td><td><code>Units\UnitWeapons.slk</code></td><td>单位武器</td></tr>
+<tr><td><code>abilitybuff</code></td><td><code>Units\AbilityBuffData.slk</code></td><td>技能 Buff</td></tr>
+<tr><td><code>abilitymeta</code></td><td><code>Units\AbilityMetaData.slk</code></td><td>技能元数据</td></tr>
+</table>
+
+<h3>实现原理</h3>
+<ol>
+<li><strong>懒加载</strong>（<code>slk_index</code>, L252）：首次访问 <code>slk.ability</code> 时自动从 MPQ 读取，结果缓存到模块表（后续访问直接命中）</li>
+<li><strong>SLK 解析器</strong>（<code>parse_slk</code>, L88）：处理 C（数据单元）、F（位置设定）、B（维度）行类型，支持分号分隔字段、类型前缀去除（K"/S"/N 等）</li>
+<li><strong>MPQ 读取</strong>（<code>read_mpq_file</code>, L20）：通过 Storm.dll ordinal 281（<code>SFileLoadFileEx</code>）从所有打开的 MPQ 中搜索文件</li>
+<li><strong>不分大小写匹配</strong>（<code>slk_find</code>, L229）：Lua 键名与 16 个已知 SLK 名称大小写不敏感匹配</li>
+</ol>
+
+<h3>Lua 使用示例</h3>
+<pre><code>local slk = require "jass.slk"
+
+-- 首次访问触发懒加载
+local ability = slk.ability["AHbz"]   -- 暴风雪
+print(ability.code)                     -- "AHbz"
+print(ability.Name)                     -- "Blizzard"
+print(ability.race)                     -- "human"
+
+-- 二次访问直接命中缓存
+local ability2 = slk.ability["AHbz"]    -- 无 MPQ 读取
+
+-- 单位数据
+local unit_data = slk.unit["hfoo"]      -- 步兵
+print(unit_data.HP)                     -- 最大生命值</code></pre>
+
+<h3>关键源文件</h3>
+<table>
+<tr><td><code>lua_slk.cpp</code></td><td><code>open_slk</code>(L276), <code>slk_index</code>(L252), <code>parse_slk</code>(L88), <code>unquote</code>(L61), <code>split_fields</code>(L77), <code>slk_find</code>(L229), <code>read_mpq_file</code>(L20)</td></tr>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<div class="module-card">
+<h2>6. jass.hook <span class="tag tag-c">lua_hook.cpp</span></h2>
+<p>JASS native 钩子模块。允许 Lua 拦截任意 JASS native 调用，修改参数、返回值或完全替换行为。</p>
+
+<h3>API 速查</h3>
+<div class="api-grid">
+<div class="api-item"><div class="sig">hook("name", callback)</div><div class="desc">安装钩子（__call 元方法）</div></div>
+<div class="api-item"><div class="sig">hook.unhook("name")</div><div class="desc">移除钩子</div></div>
+</div>
+
+<h3>回调签名</h3>
+<pre><code>hook("NativeName", function(param1, param2, ..., orig)
+    -- orig 是原始 native 函数的引用，可调用以执行原始行为
+    local result = orig(param1, param2, ...)
+    return modified_result
+end)</code></pre>
+
+<h3>实现原理</h3>
+<ol>
+<li><strong>Thunk 替代</strong>：与 japi 模块共用 14 字节 x86 thunk 布局（<code>ThunkCode</code>, L32）</li>
+<li><strong>安装 hook</strong>（<code>hook_call</code>, L252）：(a) 解析参数字符串；(b) 存储回调到 <code>LUA_REGISTRYINDEX</code>；(c) 分配 thunk 跳转到 <code>hook_dispatcher</code>；(d) 保存原始 <code>NativeInfo</code>；(e) <strong>直接修改 <code>g_native_map</code> 中该 native 的 <code>address</code> 字段</strong>为 thunk 地址</li>
+<li><strong>Hook Dispatcher</strong>（<code>hook_dispatch_impl</code>, L105）：JASS 参数 → Lua 栈 → <code>lua_pcall</code> → 返回值 → JASS。与 japi_dispatcher 类似，但额外传递 <code>orig</code> 函数</li>
+<li><strong>orig 函数</strong>：wrapper C closure 持有原始 <code>NativeInfo.address</code> 和 <code>param</code> spec，调用时走原始路径</li>
+<li><strong>卸载 hook</strong>（<code>hook_unhook</code>, L324）：恢复 <code>NativeInfo.address</code> 为原始值</li>
+</ol>
+
+<h3>与 jass.japi 的关键区别</h3>
+<table>
+<tr><th>维度</th><th>jass.japi</th><th>jass.hook</th></tr>
+<tr><td>用途</td><td>注册<strong>新</strong> JASS native</td><td>拦截<strong>已有</strong> JASS native</td></tr>
+<tr><td>注册方式</td><td><code>nfunction_add</code></td><td>修改 <code>NativeInfo.address</code></td></tr>
+<tr><td>是否有 orig</td><td>无</td><td>有（可调用原始实现）</td></tr>
+<tr><td>卸载方式</td><td>不支持卸载</td><td><code>hook.unhook()</code> 恢复原始地址</td></tr>
+</table>
+
+<h3>Lua 使用示例</h3>
+<pre><code>local hook = require "jass.hook"
+
+-- 拦截 TestJapiAdd，将结果乘以 2
+hook("TestJapiAdd", function(a, b, orig)
+    return orig(a, b) * 2
+end)
+assert(japi.TestJapiAdd(5, 7) == 24)  -- 5+7=12, *2=24
+
+-- 卸载 hook
+hook.unhook("TestJapiAdd")
+assert(japi.TestJapiAdd(5, 7) == 12)  -- 恢复正常</code></pre>
+
+<h3>关键源文件</h3>
+<table>
+<tr><td><code>lua_hook.cpp</code></td><td><code>open_hook</code>(L349), <code>hook_call</code>(L252), <code>hook_unhook</code>(L324), <code>hook_dispatcher</code>(L230), <code>hook_dispatch_impl</code>(L105), <code>HookInfo</code>(L16), <code>SimpleThunkAlloc</code>(L42)</td></tr>
+</table>
+</div>
+
+</div>
+</body>
+</html>

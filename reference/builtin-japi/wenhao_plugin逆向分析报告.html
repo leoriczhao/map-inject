@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>wenhao_plugin 逆向分析报告</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/x86asm.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"></script>
+<style>
+:root {
+  --paper: #faf7f2; --paper2: #f3efe8; --paper3: #ebe6dc;
+  --border: #e0d9cc; --border2: #d4ccbb;
+  --fg: #2d2a24; --fg2: #6b6356; --fg3: #949084;
+  --amber: #cc5020; --amber-light: #faf0e6; --amber-bg: rgba(204,80,32,.07);
+  --blue: #1a6fb5; --green: #2e7d32; --red: #b53228;
+  --shadow: 0 1px 3px rgba(0,0,0,.06);
+  --sidebar-w: 260px;
+  --font-mono: 'Cascadia Code','Fira Code','JetBrains Mono','Consolas',monospace;
+  --font-sans: -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans-serif;
+  --font-serif: Georgia,'Noto Serif SC','宋体',serif;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html { scroll-behavior:smooth; }
+body { font-family:var(--font-sans); background:var(--paper); color:var(--fg); line-height:1.7; display:flex; min-height:100vh; -webkit-font-smoothing:antialiased; }
+
+#sidebar { position:sticky; top:0; width:var(--sidebar-w); min-width:var(--sidebar-w); height:100vh; background:var(--paper2); border-right:1px solid var(--border); padding:28px 0; overflow-y:auto; z-index:10; }
+#sidebar h2 { font-size:0.75rem; font-weight:600; color:var(--fg3); text-transform:uppercase; letter-spacing:.08em; padding:0 20px 16px; border-bottom:1px solid var(--border); margin-bottom:12px; }
+#sidebar nav a { display:block; padding:7px 20px; font-size:.87rem; color:var(--fg2); text-decoration:none; border-left:2px solid transparent; transition:all .15s; }
+#sidebar nav a:hover { color:var(--fg); background:var(--paper3); }
+#sidebar nav a.active { color:var(--amber); border-left-color:var(--amber); background:var(--amber-bg); font-weight:500; }
+#sidebar nav a.sub { padding-left:36px; font-size:.81rem; }
+
+#main { flex:1; max-width:920px; padding:48px 52px 80px; overflow-x:hidden; }
+h1 { font-family:var(--font-serif); font-size:2.1rem; font-weight:700; margin-bottom:6px; color:#1a1714; letter-spacing:-.01em; line-height:1.25; }
+h1+p { color:var(--fg2); margin-bottom:40px; font-size:1rem; }
+h2 { font-family:var(--font-serif); font-size:1.35rem; font-weight:600; margin:52px 0 14px; padding-top:12px; color:#1a1714; border-bottom:1px solid var(--border); padding-bottom:10px; }
+h3 { font-size:1.08rem; font-weight:600; margin:32px 0 10px; color:#2d2a24; }
+h4 { font-size:.95rem; font-weight:600; margin:20px 0 6px; color:#3d3a34; }
+p { margin:10px 0; }
+strong { color:#1a1714; }
+a { color:var(--amber); text-decoration:none; }
+code { font-family:var(--font-mono); font-size:.85em; background:var(--paper3); padding:2px 7px; border-radius:4px; color:#5c3a1e; }
+pre { margin:18px 0; border-radius:8px; overflow-x:auto; border:1px solid var(--border); box-shadow:var(--shadow); background:#fffefc; }
+pre code { background:none; padding:0; font-size:.8rem; line-height:1.6; color:#2d2a24; }
+
+.hljs { background:#fffefc!important; color:#2d2a24!important; }
+.hljs-keyword,.hljs-type { color:#8b3a1a!important; }
+.hljs-string { color:#4a6e3a!important; }
+.hljs-comment { color:#a09888!important; font-style:italic; }
+.hljs-number { color:#b5651e!important; }
+.hljs-built_in { color:#6b4fa0!important; }
+.hljs-function,.hljs-title { color:#3d6e8c!important; }
+
+.card { background:#fffefc; border:1px solid var(--border); border-radius:10px; padding:22px 26px; margin:16px 0; box-shadow:var(--shadow); }
+.card h4 { margin-top:0; }
+table { width:100%; border-collapse:collapse; margin:18px 0; font-size:.88rem; background:#fffefc; border-radius:8px; overflow:hidden; box-shadow:var(--shadow); border:1px solid var(--border); }
+thead th { background:var(--paper2); color:#1a1714; font-weight:600; padding:11px 16px; text-align:left; border-bottom:2px solid var(--border2); font-size:.82rem; text-transform:uppercase; letter-spacing:.04em; }
+tbody td { padding:10px 16px; border-bottom:1px solid var(--border); }
+tbody tr:last-child td { border-bottom:none; }
+tbody tr:nth-child(even) { background:var(--paper); }
+tbody tr:hover { background:var(--amber-bg); }
+
+.insight { background:var(--amber-light); border:1px solid var(--border2); border-radius:10px; padding:16px 20px; margin:18px 0; font-size:.9rem; color:#4a3520; }
+.insight::before { content:'💡 '; }
+.file-path { font-family:var(--font-mono); font-size:.79rem; color:var(--fg2); background:var(--paper3); padding:3px 11px; border-radius:4px; display:inline-block; margin:2px 4px 2px 0; border:1px solid var(--border); }
+
+details { margin:18px 0; border:1px solid var(--border); border-radius:10px; overflow:hidden; box-shadow:var(--shadow); }
+summary { padding:15px 22px; cursor:pointer; background:#fffefc; font-weight:600; font-size:.93rem; color:#2d2a24; user-select:none; list-style:none; }
+summary:hover { background:var(--paper); }
+summary::-webkit-details-marker { display:none; }
+summary::before { content:'› '; color:var(--amber); font-size:1.1rem; font-weight:700; margin-right:6px; transition:transform .2s; display:inline-block; }
+details[open] summary::before { transform:rotate(90deg); }
+details[open] summary { border-bottom:1px solid var(--border); }
+details .inner { padding:18px 22px; background:#fffefc; }
+
+.mermaid-wrap { background:#fffefc; border:1px solid var(--border); border-radius:10px; padding:28px; margin:18px 0; overflow-x:auto; box-shadow:var(--shadow); display:flex; justify-content:center; }
+.ascii-box { font-family:var(--font-mono); font-size:.78rem; line-height:1.45; white-space:pre; background:#fffefc; border:1px solid var(--border); border-radius:8px; padding:18px 22px; margin:16px 0; overflow-x:auto; box-shadow:var(--shadow); }
+.disasm-block { background:#1e1e1e; color:#d4d4d4; border-radius:8px; padding:18px 22px; margin:16px 0; overflow-x:auto; font-family:var(--font-mono); font-size:.78rem; line-height:1.6; white-space:pre; border:1px solid #333; }
+.disasm-block .addr { color:#569cd6; }
+.disasm-block .op { color:#c586c0; }
+.disasm-block .args { color:#9cdcfe; }
+.disasm-block .comment { color:#6a9955; }
+
+.cols { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:16px 0; }
+@media (max-width:720px) { .cols { grid-template-columns:1fr; } }
+@media (max-width:860px) {
+  body { flex-direction:column; }
+  #sidebar { position:relative; width:100%; min-width:0; height:auto; max-height:40vh; border-right:none; border-bottom:1px solid var(--border); }
+  #main { padding:28px 22px 60px; }
+}
+
+footer { margin-top:72px; padding-top:24px; border-top:1px solid var(--border); color:var(--fg3); font-size:.8rem; }
+footer span { margin-right:28px; }
+</style>
+</head>
+<body>
+
+<aside id="sidebar">
+  <h2>导航</h2>
+  <nav>
+    <a href="#overview">概述</a>
+    <a href="#exports">导出 &amp; 全局变量</a>
+    <a href="#iat">IAT 解析</a>
+    <a href="#strings">字符串证据</a>
+    <a href="#disasm-call">call() 反汇编</a>
+    <a href="#sub-1020">sub_10001020 分析</a>
+    <a href="#disasm-get">get() 反汇编</a>
+    <a href="#full-flow">完整执行流程</a>
+    <a href="#ydwe-lineage">与 YDWE 的血缘关系</a>
+    <a href="#why-broken">你的方案为什么失败</a>
+  </nav>
+</aside>
+
+<main id="main">
+
+<h1>wenhao_plugin 逆向分析报告</h1>
+<p>基于 <code>wenhao_plugin.tga</code>（4.65MB x86 PE DLL）的二进制逆向。文件来源：内置 JAPI 1.34.w3x。</p>
+
+<!-- ════════════ OVERVIEW ════════════ -->
+<section id="overview">
+<h2>一、概述</h2>
+
+<div class="insight">
+<strong>结论先行：wenhao_plugin 不是一个自包含的 Lua 引擎，它是一个 MPQ 文件导出器 + DLL 加载器。</strong><br>
+它将 3-5 个从 MPQ 提取的 DLL 链式加载，把 JASS 原生注册（jass.dll）和 Lua 引擎启动（lua_engine.dll）委托给这些子 DLL。
+</div>
+
+<div class="card">
+<h4>wenhao_plugin 的物理构成</h4>
+<table>
+<tr><th>PE 属性</th><td>x86 DLL, Image Base 0x10000000</td></tr>
+<tr><th>导出</th><td><code>"call"</code> (RVA 0x1100), <code>"get"</code> (RVA 0x1230)</td></tr>
+<tr><th>导入</th><td>KERNEL32.dll: FindResourceA, FreeResource, LoadResource, SizeofResource, LockResource, GetLastError, Sleep, GetProcAddress, LoadLibraryA, GetModuleHandleA</td></tr>
+<tr><th>依赖</th><td>msvcrt.dll, Storm.dll（运行时动态加载）</td></tr>
+<tr><th>体积</th><td>4,653,568 字节 — 其中大量是嵌入的 C++ RTTI、bzip2 压缩器代码、Lua 5.3 运行时</td></tr>
+</table>
+</div>
+</section>
+
+<!-- ════════════ EXPORTS ════════════ -->
+<section id="exports">
+<h2>二、导出函数与全局变量</h2>
+
+<h3>2.1 全局状态变量</h3>
+
+<table>
+<tr><th>地址</th><th>名称（推测）</th><th>初始值</th><th>写入者</th><th>读取者</th></tr>
+<tr><td><code>0x10014F4C</code></td><td>g_hModule</td><td>0x4EDBB4D2</td><td>DllMain (0x10001006)</td><td>—</td></tr>
+<tr><td><code>0x10014F50</code></td><td>g_initialized</td><td>0x773E249A → <code>1</code></td><td>"call" 末尾 (0x10001220)</td><td>"get" (0x10001230)</td></tr>
+<tr><td><code>0x10014F54</code></td><td>g_pExportFromMpq</td><td>0x4EDBB4D2</td><td>"call" 开头 (0x10001118)</td><td>子函数通过封装修调用</td></tr>
+<tr><td><code>0x1000E028</code></td><td>pExportFromMpq (间接)</td><td>指向 DLL 内部变量</td><td>DllMain 或外部设置</td><td>sub_10001020 (0x10001027)</td></tr>
+</table>
+</section>
+
+<!-- ════════════ IAT ════════════ -->
+<section id="iat">
+<h2>三、IAT 解析</h2>
+
+<p>DLL 从 KERNEL32.dll 导入以下函数，拆分为两组用法：</p>
+
+<div class="cols">
+<div class="card">
+<h4>文件资源操作组</h4>
+<p>用于从自身 PE 资源中提取嵌入文件：</p>
+<table>
+<tr><td><code>FindResourceA</code></td><td>查找嵌入资源</td></tr>
+<tr><td><code>SizeofResource</code></td><td>获取资源大小</td></tr>
+<tr><td><code>LoadResource</code></td><td>加载资源</td></tr>
+<tr><td><code>LockResource</code></td><td>锁定资源内存</td></tr>
+<tr><td><code>FreeResource</code></td><td>释放资源</td></tr>
+</table>
+</div>
+<div class="card">
+<h4>DLL 加载与流程控制组</h4>
+<table>
+<tr><td><code>LoadLibraryA</code></td><td>加载 DLL</td></tr>
+<tr><td><code>GetProcAddress</code></td><td>获取导出函数</td></tr>
+<tr><td><code>GetModuleHandleA</code></td><td>检查 DLL 已加载</td></tr>
+<tr><td><code>Sleep</code></td><td>重试等待</td></tr>
+<tr><td><code>GetLastError</code></td><td>错误判断</td></tr>
+</table>
+</div>
+</div>
+
+<p>值得注意的是 <strong>没有导入 VirtualAlloc、WriteProcessMemory 等内存操作函数</strong>。wenhao_plugin 本身不做进程注入，它的 job 纯粹是文件导出 + DLL 加载。</p>
+</section>
+
+<!-- ════════════ STRINGS ════════════ -->
+<section id="strings">
+<h2>四、字符串证据</h2>
+
+<h3>4.1 "call" 函数直接引用的字符串</h3>
+
+<table>
+<tr><th>地址</th><th>字符串</th><th>用途</th></tr>
+<tr><td><code>0x10011D48</code></td><td><code>"pjass.exe"</code></td><td>从 MPQ 导出 pjass.exe</td></tr>
+<tr><td><code>0x10011D54</code></td><td><code>"exe"</code></td><td>文件扩展名参数</td></tr>
+<tr><td><code>0x10011D58</code></td><td><code>"D3DX9_42.dll"</code></td><td>从 MPQ 导出 D3DX9_42.dll</td></tr>
+<tr><td><code>0x10011D68</code></td><td><code>"dll"</code></td><td>文件扩展名参数</td></tr>
+<tr><td><code>0x10011D6C</code></td><td><code>"newD3d9.dll"</code></td><td>从 MPQ 导出 newD3d9.dll（替换 D3D9）</td></tr>
+<tr><td><code>0x10011D78</code></td><td><code>"jass.dll"</code></td><td>从 MPQ 导出 + 加载 jass.dll</td></tr>
+<tr><td><code>0x10011D84</code></td><td><code>"call"</code></td><td>GetProcAddress(jass.dll, "call")</td></tr>
+<tr><td><code>0x10011D8C</code></td><td><code>"lua_engine.dll"</code></td><td>从 MPQ 导出 + 加载 lua_engine.dll</td></tr>
+<tr><td><code>0x10011D9C</code></td><td><code>"init_lua_engine"</code></td><td>GetProcAddress(lua_engine.dll, "init_lua_engine")</td></tr>
+<tr><td><code>0x10011DAC</code></td><td><code>"init"</code></td><td>GetProcAddress(某 DLL, "init")</td></tr>
+</table>
+
+<h3>4.2 全 DLL 范围内的关键文件名</h3>
+
+<pre><code class="language-plaintext">Jass.dll                  ← jass.dll（注意大写 J）
+lua_engine.dll            ← 核心 Lua 引擎
+pjass.exe                 ← JASS 语法检查器
+newD3d9.dll               ← D3D9 替换层
+D3DX9_42.dll              ← DirectX 辅助库
+QB_inject.dll             ← 注入辅助（?）
+wenhao_plugin.tga         ← 自身文件名
+yd_lua_engine.dll         ← YDWE 的 Lua 引擎！
+
+Scripts\blizzard.j        ← 魔兽 JASS 标准库
+Scripts\common.j          ← 魔兽 JASS 标准库
+Scripts\war3map.j         ← 地图 JASS 脚本
+jass_temp\Scripts\blizzard.j
+jass_temp\common.j
+jass_temp\war3map.j       ← 临时编译路径</code></pre>
+
+<h3>4.3 Lua 5.3 运行时证据</h3>
+
+<pre><code class="language-plaintext">package.path 模式:
+!\lua\?.lua;!\lua\?\init.lua;!\?.lua;!\?\init.lua;
+!\..\share\lua\5.3\?.lua;!\..\share\lua\5.3\?\init.lua;
+.\?.lua;.\?\init.lua
+
+package.cpath 模式:
+!\?.dll;!\..\lib\lua\5.3\?.dll;!\loadall.dll;.\?.dll</code></pre>
+
+<h3>4.4 YDWE 同源的 C++ 符号表</h3>
+
+<pre><code class="language-plaintext">warcraft3::jass::call_param        ← JASS 函数调用参数封装
+warcraft3::jass::func_value        ← JASS 函数元数据（返回值/参数类型）
+warcraft3::jass::global_variable   ← JASS 全局变量访问
+warcraft3::jass::string_fake       ← JASS 字符串包装
+warcraft3::hashtable::variable_node
+base::hook::detail::replace_memory ← 内存补丁 Hook
+base::hook::window_event           ← 窗口事件 Hook
+base::lua_engine::slk::slk_interface_storm  ← SLK 表的 Storm 接口
+slk::ObjectManager, SlkValue, SlkSingle, MetaSingle
+
+Jass.cpp                           ← 源文件名 (!)
+LuaEngine.lib                      ← 链接的库
+</code></pre>
+
+<div class="insight">
+<strong>wenhao_plugin 和 YDWE 共享同一个 C++ 代码谱系。</strong>命名空间结构、类名、SLK 系统、JASS 接口层完全一致。wenhao_plugin 很可能是 YDWE 的前身或早期版本。
+</div>
+</section>
+
+<!-- ════════════ DISASM CALL ════════════ -->
+<section id="disasm-call">
+<h2>五、"call" 导出 — 完整反汇编与逐行注释</h2>
+
+<p><strong>"call" 原型（从反汇编还原）：</strong></p>
+
+<pre><code class="language-cpp">// cdecl 或 stdcall，1 个参数，调用约定由 call site 决定
+void __cdecl call(uint32_t pExportFromMpq);</code></pre>
+
+<p><strong>完整反汇编（0x10001100 — 0x1000122B）：</strong></p>
+
+<pre><code class="language-x86asm">; ===== "call" export (RVA 0x1100) =====
+; 参数: [ebp+8] = pExportFromMpq (game.dll 内部函数指针)
+; 作用: 按顺序从 MPQ 导出文件 → 加载 DLL → 调用各 DLL 的入口
+
+10001100: push   ebp
+10001101: mov    ebp, esp
+
+; ─── Step 1: 导出 pjass.exe ───
+10001103: mov    eax, [ebp+8]          ; eax = pExportFromMpq
+10001106: mov    edx, 0x10011d54       ; edx = "exe" (扩展名)
+1000110b: push   ebx
+1000110c: push   esi
+1000110d: push   edi
+1000110e: push   0x10011d48            ; edi = "pjass.exe"
+10001113: mov    ecx, 0x6c             ; ecx = 'l' (操作码: Load/Export?)
+10001118: mov    [0x10014f54], eax     ; ★ 保存 pExportFromMpq 到全局变量
+1000111d: call   0x10001020            ; sub_ExportRetry("pjass.exe", "exe", 'l')
+
+; ─── Step 2: 导出 D3DX9_42.dll ───
+10001122: push   0x10011d58            ; "D3DX9_42.dll"
+10001127: mov    edx, 0x10011d68       ; edx = "dll"
+1000112c: mov    ecx, 0x73             ; ecx = 's'
+10001131: call   0x10001020            ; sub_ExportRetry("D3DX9_42.dll", "dll", 's')
+
+; ─── Step 3: 导出 newD3d9.dll ───
+10001136: push   0x10011d6c            ; "newD3d9.dll"
+1000113b: mov    edx, 0x10011d68       ; edx = "dll"
+10001140: mov    ecx, 0x6e             ; ecx = 'n'
+10001145: call   0x10001020            ; sub_ExportRetry("newD3d9.dll", "dll", 'n')
+1000114a: add    esp, 0x0c             ; 弹出前 3 次调用的参数
+
+; ─── Step 4: 加载 jass.dll → 调 "call" 导出 ───
+1000114d: push   0x10011d78            ; "jass.dll"
+10001152: call   [0x1000e024]          ; GetModuleHandleA("jass.dll")
+10001158: mov    ebx, [0x1000e00c]     ; ebx = Sleep (存到 callee-save 寄存器)
+1000115e: mov    esi, eax              ; esi = jass.dll 模块句柄
+10001160: mov    edi, [0x1000e01c]     ; edi = LoadLibraryA
+10001166: test   esi, esi              ; 已加载？
+10001168: jne    0x100011a1            ; 是 → 跳到 GetProcAddress
+
+; ─── jass.dll 未加载：先导出再加载 ───
+1000116a: push   0x10011d78            ; "jass.dll"
+1000116f: mov    edx, 0x10011d68       ; "dll"
+10001174: mov    ecx, 0x6d             ; 'm'
+10001179: call   0x10001020            ; ExportRetry("jass.dll", "dll", 'm')
+1000117e: add    esp, 0x04
+10001181: push   0x10011d78            ; "jass.dll"
+10001186: call   edi                   ; LoadLibraryA("jass.dll")
+10001188: mov    esi, eax              ; esi = 新加载的句柄
+1000118a: test   esi, esi
+1000118c: jne    0x100011a1            ; 成功 → 继续
+; ─── jass.dll 加载失败：重试循环（最多 10 次，间隔 10ms）───
+1000118e: mov    edi, edi              ; nop
+10001190: push   0x0a                  ; 10 ms
+10001192: call   ebx                   ; Sleep(10)
+10001194: push   0x10011d78            ; "jass.dll"
+10001199: call   edi                   ; LoadLibraryA("jass.dll")
+1000119b: mov    esi, eax
+1000119d: test   esi, esi
+1000119f: je     0x10001190            ; 失败 → 继续重试
+
+; ─── jass.dll 加载成功 → 调 "call" 导出 ───
+100011a1: push   0x10011d84            ; "call"
+100011a6: push   esi                   ; jass.dll 句柄
+100011a7: call   [0x1000e018]          ; GetProcAddress(jass.dll, "call")
+100011ad: test   eax, eax
+100011af: je     0x100011b8            ; 没找到 → 跳过
+100011b1: push   0x00                  ; 参数 = 0
+100011b3: call   eax                   ; ★ jass.call(0)
+100011b5: add    esp, 0x04
+
+; ─── Step 5: 加载 lua_engine.dll → 调 "init_lua_engine" 导出 ───
+100011b8: push   0x10011d8c            ; "lua_engine.dll"
+100011bd: call   [0x1000e024]          ; GetModuleHandleA("lua_engine.dll")
+100011c3: test   eax, eax              ; 已加载？
+100011c5: jne    0x100011f6            ; 是 → 跳到 GetProcAddress
+
+; ─── lua_engine.dll 未加载：导出 + 重试加载 ───
+100011c7: push   0x10011d8c            ; "lua_engine.dll"
+100011cc: mov    edx, 0x10011d68       ; "dll"
+100011d1: lea    ecx, [eax+0x6f]       ; 'o' (0x6F)
+100011d4: call   0x10001020            ; ExportRetry("lua_engine.dll", "dll", 'o')
+100011d9: add    esp, 0x04
+100011dc: push   0x10011d8c            ; "lua_engine.dll"
+100011e1: call   edi                   ; LoadLibraryA("lua_engine.dll")
+100011e3: test   eax, eax
+100011e5: jne    0x100011f6
+100011e7: push   0x0a                  ; 10 ms
+100011e9: call   ebx                   ; Sleep(10)
+100011eb: push   0x10011d8c            ; "lua_engine.dll"
+100011f0: call   edi                   ; LoadLibraryA("lua_engine.dll")
+100011f2: test   eax, eax
+100011f4: je     0x100011e7            ; 失败 → 重试
+
+; ─── lua_engine.dll 加载成功 → 调 "init_lua_engine" 导出 ───
+100011f6: mov    edi, [0x1000e018]     ; edi = GetProcAddress
+100011fc: push   0x10011d9c            ; "init_lua_engine"
+10001201: push   eax                   ; lua_engine.dll 句柄
+10001202: call   edi                   ; GetProcAddress(lua_engine.dll, "init_lua_engine")
+10001204: test   eax, eax
+10001206: je     0x1000120a
+10001208: call   eax                   ; ★ lua_engine.init_lua_engine()
+
+; ─── Step 6: 调 "init" 导出（newD3d9.dll？） ───
+1000120a: push   0x10011dac            ; "init"
+1000120f: push   esi                   ; jass.dll 句柄（!）
+10001210: call   edi                   ; GetProcAddress(jass.dll, "init")
+10001212: pop    edi
+10001213: pop    esi
+10001214: pop    ebx
+10001215: test   eax, eax
+10001217: je     0x10001220
+10001219: push   0x00
+1000121b: call   eax                   ; ★ jass.init(0)
+1000121d: add    esp, 0x04
+
+; ─── Step 7: 设置初始化完成标志 ───
+10001220: mov    [0x10014f50], 1       ; ★ g_initialized = TRUE
+1000122a: pop    ebp
+1000122b: ret</code></pre>
+</section>
+
+<!-- ════════════ SUB_1020 ════════════ -->
+<section id="sub-1020">
+<h2>六、sub_10001020 — MPQ 文件导出重试包装器</h2>
+
+<p>这是 "call" 调用的核心辅助函数，封装了 MPQ 文件导出 + 重试逻辑：</p>
+
+<pre><code class="language-cpp">// 从反汇编还原的伪代码：
+// 参数: edi = 文件名, edx = 扩展名, ecx = 操作码
+bool sub_10001020(const char* filename, const char* extension, char opcode) {
+    uint32_t pExport = *0x1000E028;  // 全局 pExportFromMpq 指针
+
+    for (int retry = 0; retry < 10; retry++) {
+        pExport(filename);            // 调用 game.dll!ExportFileFromMpq(filename)
+        uint32_t err = GetLastError();
+
+        if (err == 0x7E)  goto success;  // ERROR_MOD_NOT_FOUND (文件已存在？)
+        if (err == 0x00)  goto success;  // ERROR_SUCCESS
+        if (err == 0x02)  goto success;  // ERROR_FILE_NOT_FOUND?
+
+        // 失败但可重试：
+        if (err != 0x7E && err != 0x02 && err != 0x00) {
+            Sleep(10);                   // 等待 10ms
+            // 使用 opcode + extension 做额外文件操作...
+        }
+    }
+
+success:
+    // 对导出的文件进行后续处理
+    // 使用 LoadResource / LockResource / FreeResource 管理资源
+    return (err == 0x7E || err == 0x02 || err == 0x00);
+}</code></pre>
+
+<p>关键发现：<strong>ExportFileFromMpq 的函数指针来自全局变量 <code>0x1000E028</code></strong>，不是 "call" 的参数。这意味着在 DllMain 或某个初始化器中，需要先把 pExportFromMpq 写入这个全局槽位。但 "call" 的参数 pExportFromMpq 被保存到了 <code>0x10014F54</code>（另一个全局变量），可能用于不同的代码路径。</p>
+</section>
+
+<!-- ════════════ GET ════════════ -->
+<section id="disasm-get">
+<h2>七、"get" 导出 — 初始化状态查询</h2>
+
+<pre><code class="language-x86asm">; ===== "get" export (RVA 0x1230) =====
+; 返回: eax = g_initialized 标志 (0 = 未完成, 1 = 已完成)
+
+10001230: mov    eax, [0x10014f50]     ; 读取全局初始化标志
+10001235: ret                          ; return g_initialized;</code></pre>
+
+<p>只有两条指令。它是 <code>war3map.j</code> 中 <code>initializePlugin()</code> 调用 <code>UnitId(I2S(GetHandleId(japi_ht)))</code> 之后，用于<strong>轮询等待 "call" 是否执行完毕</strong>的标志位。</p>
+</section>
+
+<!-- ════════════ FULL FLOW ════════════ -->
+<section id="full-flow">
+<h2>八、完整执行流程</h2>
+
+<div class="ascii-box">war3map.j main()
+  │
+  └─ initializePlugin()
+       ├─ StartCampaignAI(Player(12), "callback")
+       │    └─ AI 编译器加载 callback（不检查类型安全）
+       │
+       ├─ callback::main()
+       │    ├─ MemHackAPI 漏洞利用 → 任意内存读写
+       │    ├─ 版本检测 → 硬编码偏移量定位：
+       │    │    pExportFromMpq = GameDLL + 0x702C50 (1.27a)
+       │    ├─ AllocateExecutableMemory → RWX 内存 (shellcode)
+       │    ├─ ExportFileFromMpq("wenhao_plugin.tga", "&lt;pid&gt;.dll")
+       │    ├─ LoadLibrary("&lt;pid&gt;.dll")  → wenhao_plugin.dll 已就位
+       │    ├─ GetProcAddress(pid_dll, "call")
+       │    └─ CallCdecl("call", pExportFromMpq)
+       │
+       └─ UnitId(I2S(GetHandleId(japi_ht)))  → 传给 wenhao_plugin 的 hashtable
+
+                   ╔══════════════════════════════════════════════╗
+                   ║  wenhao_plugin."call"(pExportFromMpq)        ║
+                   ╚══════════════════════════════════════════════╝
+                              │
+     ┌────────────────────────┼────────────────────────────┐
+     │                        │                            │
+     ▼                        ▼                            ▼
+  ExportRetry             LoadLibrary                 GetProcAddress
+  ("pjass.exe")           ("jass.dll")                ("call") → jass.call(0)
+                          │                                     │
+     ┌────────────────────┤                              ┌──────┴──────┐
+     │                    │                              │             │
+     ▼                    ▼                              ▼             ▼
+  ExportRetry         重试循环(最多10次)           注册 JAPI        Hook UnitId
+  ("D3DX9_42.dll")    Sleep(10) 间隔              native 函数      作为 hashtable
+     │                                             到 JASS VM      分发网关
+     ▼
+  ExportRetry
+  ("newD3d9.dll")
+     │
+     ▼
+  LoadLibrary("lua_engine.dll")  →  重试循环
+     │
+     └─ GetProcAddress("init_lua_engine")
+          │
+          └─ lua_engine.init_lua_engine()
+               │
+               ├─ luaL_newstate()              → Lua 5.3 状态机
+               ├─ luaL_openlibs()              → 标准库
+               ├─ 设置 package.path / cpath   → 文件查找路径
+               ├─ open_jass_modules()          → 注册 jass.* 模块
+               ├─ loadfile("war3map.lua")      → 从 MPQ 加载用户脚本
+               └─ lua_pcall()                  → 执行地图 Lua 逻辑
+                        │
+                        └─ require "jass.common"
+                           require "jass.japi"
+                           require "jass.slk"
+                           require "jass.runtime"
+                           ... 用户地图代码 ...
+
+     ┌─────────────────────────────────────────┐
+     │  GetProcAddress(jass.dll, "init")        │
+     │  → jass.init(0)   (后期初始化)           │
+     └─────────────────────────────────────────┘
+
+  ★ g_initialized = 1 → "get" 返回 TRUE</div>
+</section>
+
+<!-- ════════════ YDWE LINEAGE ════════════ -->
+<section id="ydwe-lineage">
+<h2>九、与 YDWE 的血缘关系</h2>
+
+<div class="cols">
+<div class="card">
+<h4>wenhao_plugin 内部代码结构</h4>
+<p>从 C++ RTTI 符号还原：</p>
+<pre><code class="language-plaintext">warcraft3::jass::
+  ├── call_param        (参数封装)
+  ├── func_value        (函数元数据)
+  ├── global_variable   (全局变量访问)
+  ├── string_fake       (字符串包装)
+  └── hashtable::       (哈希表)
+
+base::hook::
+  ├── replace_memory    (内存补丁)
+  └── window_event      (窗口事件)
+
+base::lua_engine::slk::
+  ├── slk_interface_storm
+  ├── ObjectManager
+  ├── SlkValue / SlkSingle
+  └── MetaSingle</code></pre>
+</div>
+<div class="card">
+<h4>YDWE 当前代码结构（ydwar3 + yd_lua_engine）</h4>
+<pre><code class="language-plaintext">warcraft3::jass::
+  ├── call_param        ✓ 相同
+  ├── func_value        ✓ 相同
+  ├── global_variable   ✓ 相同
+  ├── string_fake       ✓ 相同
+  ├── trampoline_function  YDWE 新增
+  └── hook              YDWE 新增
+
+base::hook::
+  ├── replace_memory    ✓ 相同
+  └── window_event      ✓ 可能相同
+
+lua_engine::
+  ├── open_lua_engine   YDWE 重构
+  ├── libs_common       预加载模块化
+  ├── lua_loader.cpp    新增 force_watch
+  └── slk::             ✓ 相同子系统</code></pre>
+</div>
+</div>
+
+<div class="insight">
+核心发现：<strong>wenhao_plugin 和 YDWE 共享同一个 C++ 代码谱系。</strong>wenhao_plugin 将 JASS 注册（jass.dll）和 Lua 引擎（lua_engine.dll）分离为两个独立 DLL，由 wenhao_plugin 作为加载器统一管理。<br><br>
+YDWE 后来将这两个功能合并到 yd_lua_engine.dll 中，并添加了 virtual_mpq 的 force_watch 基础设施。但 <code>jass.dll</code> 和 <code>lua_engine.dll</code> 的内部逻辑（jass.* 模块、SLK 系统、JASS 原生注册）在 YDWE 中得以保留和发展。
+</div>
+</section>
+
+<!-- ════════════ WHY BROKEN ════════════ -->
+<section id="why-broken">
+<h2>十、你的方案为什么跑不了</h2>
+
+<p>现在有了 wenhao_plugin 的完整逆向，对比你的 port 方案就很清楚了：</p>
+
+<table>
+<tr><th>步骤</th><th>wenhao_plugin 原版</th><th>你的 YDWE port</th><th>问题？</th></tr>
+<tr>
+  <td>加载哪个 DLL</td>
+  <td><code>wenhao_plugin.dll</code>（一个加载器）</td>
+  <td><code>lua53 → ydbase → ydwar3 → yd_lua_engine</code>（链式）</td>
+  <td>不同代码库，不同接口</td>
+</tr>
+<tr>
+  <td>导出函数</td>
+  <td><code>"call"(pExportFromMpq)</code> — 有参数</td>
+  <td><code>Initialize()</code> — 无参数</td>
+  <td><span style="color:var(--red)">❌ 接口完全不同</span></td>
+</tr>
+<tr>
+  <td>JASS 注册</td>
+  <td><code>jass.dll → jass.call(0)</code><br>jass.dll 内部直接调 game.dll 注册函数</td>
+  <td><code>yd_jass_api.Initialize()</code><br>依赖 war3_searcher 找 StringCase 定位注册函数</td>
+  <td><span style="color:var(--amber)">⚠ 需要 yd_jass_api 也加载</span></td>
+</tr>
+<tr>
+  <td>Lua 启动</td>
+  <td><code>lua_engine.init_lua_engine()</code><br>直接创建 Lua 状态 + 加载脚本</td>
+  <td><code>yd_lua_engine.Initialize()</code><br><strong>只注册 force_watch，不加载脚本</strong></td>
+  <td><span style="color:var(--red)">❌ 等不到 force_watch 触发</span></td>
+</tr>
+<tr>
+  <td>文件导出</td>
+  <td><code>pExportFromMpq</code> 从 MPQ 提取 jass.dll / lua_engine.dll</td>
+  <td>你的 callback 自己 ExportFileFromMpq</td>
+  <td>✅ 这一步你做得对</td>
+</tr>
+<tr>
+  <td>初始化标志</td>
+  <td><code>"get"</code> 导出返回完成状态</td>
+  <td>没有等价机制</td>
+  <td>⚠ 缺少轮询能力</td>
+</tr>
+</table>
+
+<h3>核心问题</h3>
+
+<div class="card">
+<p>wenhao_plugin 的 <code>lua_engine.dll</code> 的 <code>"init_lua_engine"</code> 导出<strong>一被调用就立即创建 Lua 状态并加载执行 war3map.lua</strong>。它是一个主动的、立即生效的函数。</p>
+<p>YDWE 的 <code>yd_lua_engine.dll</code> 的 <code>Initialize()</code> 导出<strong>只注册了一个等待型回调</strong>。它依赖 virtual_mpq IAT hook 在将来某个时刻触发，而那个时刻在 callback 上下文中永远不会到来。</p>
+<p><strong>这两个 DLL 虽然代码同源，但初始化接口的设计哲学完全不同。</strong></p>
+</div>
+
+<h3>修法</h3>
+
+<p>最简单的修复：在 YDWE 的 <code>lua_loader.cpp</code> 中添加一个新导出，等效于 wenhao_plugin 的 <code>"init_lua_engine"</code>：</p>
+
+<pre><code class="language-cpp">// 新增：直接触发 Lua 加载，不依赖 force_watch
+// 等效于原版 lua_engine.dll 的 "init_lua_engine" 导出
+extern "C" __declspec(dllexport) void InitLuaEngine() {
+    initialize_lua();  // 直接从 MPQ 读 war3map.lua + 执行
+}
+
+// Initialize 保持不变（保留 force_watch 注册，用于 YDWE 启动器场景）
+extern "C" __declspec(dllexport) void Initialize() {
+    lua_loader::initialize();  // 注册 force_watch + event_game_reset
+}</code></pre>
+
+<p>然后在 callback 中按 wenhao_plugin 原版的顺序调用：</p>
+
+<pre><code class="language-jass">// 1. 加载 DLL 链（你已实现）
+// 2. 初始化 JAPI native（你已实现）
+// set i = GetModuleProcAddress("yd_jass_api.dll", "Initialize")
+// call CallCdeclWith1Args(i, 0)
+
+// 3. 初始化 Lua 引擎注册（保留 force_watch）
+// set i = GetModuleProcAddress("yd_lua_engine.dll", "Initialize")
+// call CallCdeclWith1Args(i, 0)
+
+// 4. ★ NEW：直接触发 Lua 加载（等效原版 init_lua_engine）
+set i = GetModuleProcAddress("yd_lua_engine.dll", "InitLuaEngine")
+call CallCdeclWith1Args(i, 0)
+</code></pre>
+</section>
+
+<footer>
+  <span>逆向分析基于 <code>wenhao_plugin.tga</code> PE 二进制（MD5 未计算）</span>
+  <span>分析工具：Python pefile 手动解析 + objdump 反汇编</span>
+  <span>2026-05-17</span>
+</footer>
+
+</main>
+
+<script>
+hljs.highlightAll();
+const navLinks = document.querySelectorAll('#sidebar nav a');
+const sections = [...navLinks].map(a => document.querySelector(a.getAttribute('href')));
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const link = document.querySelector(`#sidebar nav a[href="#${e.target.id}"]`);
+      if (link) link.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.filter(Boolean).forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

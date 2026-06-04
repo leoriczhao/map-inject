@@ -1,0 +1,12 @@
+[submodule "reference/YDWE"]
+	path = reference/YDWE
+	url = https://github.com/actboy168/YDWE.git
+[submodule "reference/ujapi-full"]
+	path = reference/ujapi-full
+	url = https://github.com/UnryzeC/UjAPI.git
+[submodule "src/vendor/bee-lua"]
+	path = src/vendor/bee-lua
+	url = https://github.com/actboy168/bee.lua.git
+[submodule "tools/pjass-src"]
+	path = tools/pjass-src
+	url = https://github.com/lep/pjass.git

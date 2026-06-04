@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>架构总览 · japi.dll</title>
+<style>
+  :root {
+    --bg:#0d1117; --card-bg:#161b22; --border:#30363d; --text:#c9d1d9;
+    --text-dim:#8b949e; --accent:#58a6ff; --green:#3fb950; --orange:#d2991d;
+    --red:#f85149; --code-bg:#0d1117;
+  }
+  * { margin:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .nav { background:var(--card-bg); border-bottom:1px solid var(--border); padding:12px 24px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .nav a { color:var(--accent); text-decoration:none; font-size:0.9em; }
+  .nav a:hover { text-decoration:underline; }
+  .nav .cur { color:var(--text); font-weight:600; }
+  .container { max-width:1000px; margin:0 auto; padding:24px 20px; }
+  h1 { font-size:1.8em; margin-bottom:8px; }
+  h2 { font-size:1.35em; margin:36px 0 14px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+  h3 { font-size:1.1em; margin:22px 0 10px; color:var(--accent); }
+  p, li { color:var(--text); }
+  ul, ol { padding-left:22px; }
+  li { margin:4px 0; }
+
+  .info-box { background:var(--card-bg); border:1px solid var(--border); border-radius:6px; padding:16px 20px; margin:16px 0; }
+  .info-box.warn { border-left:3px solid var(--orange); }
+  .info-box.note { border-left:3px solid var(--accent); }
+
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:14px 18px; overflow-x:auto; font:12.5px/1.5 "Cascadia Code","Consolas",monospace; margin:12px 0; }
+  code { font:12.5px/1.4 "Cascadia Code","Consolas",monospace; background:rgba(255,255,255,0.06); padding:1px 5px; border-radius:3px; }
+  pre code { background:none; padding:0; }
+
+  .flow-item { display:flex; gap:16px; align-items:flex-start; margin:12px 0; padding:12px 16px; background:var(--card-bg); border-radius:6px; border:1px solid var(--border); }
+  .flow-num { background:var(--accent); color:#fff; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.85em; flex-shrink:0; }
+  .flow-content h4 { margin:0 0 4px; }
+  .flow-content p { margin:0; color:var(--text-dim); font-size:0.92em; }
+
+  table { width:100%; border-collapse:collapse; margin:14px 0; font-size:0.92em; }
+  th { background:var(--card-bg); padding:9px 12px; text-align:left; border:1px solid var(--border); color:var(--accent); }
+  td { padding:7px 12px; border:1px solid var(--border); }
+  tr:nth-child(even) td { background:rgba(255,255,255,0.015); }
+
+  .back-link { display:inline-block; margin-bottom:20px; }
+  @media (max-width:700px) { .container { padding:16px 12px; } }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="index.html">← 首页</a>
+  <span class="cur">架构总览</span>
+  <a href="modules.html">Lua 模块</a>
+  <a href="internals.html">VM 内部</a>
+  <a href="build-and-test.html">构建与测试</a>
+  <a href="source-index.html">源码索引</a>
+  <a href="tooling.html">工具链</a>
+</div>
+
+<div class="container">
+
+<h1>🏗️ 架构总览</h1>
+
+<h2>1. 项目目标</h2>
+<p>用一个 <code>japi.dll</code>（<strong>静态链接 Lua 5.3</strong>）替代 YDWE 的五 DLL 链（<code>lua53.dll → ydbase.dll → ydwar3.dll → yd_lua_engine.dll → yd_jass_api.dll</code>），通过 <strong>callback exploit</strong> 加载，在游戏内自启动 Lua 引擎，提供完整的 JASS↔Lua 互操作。</p>
+
+<h2>2. 核心原理：Callback Exploit</h2>
+
+<p>Warcraft III 的 <code>StartCampaignAI</code> 函数接受一个 JASS 文件名作为参数，由 AI 编译器编译执行。关键漏洞在于 <strong>jasshelper 的类型混淆</strong>：利用 <code>l__</code> 前缀绕过类型检查，使得 JASS 代码可以读写任意内存地址。这就是所谓的 "MemHackAPI"。</p>
+
+<div class="info-box note">
+<strong>核心洞察：</strong> callback 文件虽然以 JASS 语法编写，但通过 <code>l__</code> 前缀的数组类型混淆，获得了 C 语言级别的任意内存读写能力。这使得纯 JASS 代码可以调用 <code>LoadLibrary</code>、<code>GetProcAddress</code> 等 Windows API。
+</div>
+
+<h2>3. 完整执行流程</h2>
+
+<div class="flow-item"><div class="flow-num">1</div><div class="flow-content"><h4>War3 加载地图 → 编译 war3map.j → 执行 main()</h4><p>地图脚本 <code>war3map.j</code> 的 <code>main()</code> 函数调用 <code>StartCampaignAI(Player(12), "callback")</code>，触发 AI 编译器加载并编译 callback 文件。AI 编译器跳过常规类型检查，允许危险的内存操作。</p></div></div>
+
+<div class="flow-item"><div class="flow-num">2</div><div class="flow-content"><h4>callback::main() — 版本检测 + 内存解锁 + DLL 加载</h4><p>callback 的 <code>main()</code> 执行：(a) 版本检测（比较 PE 头识别 1.27a/1.26a/1.24b/1.24e）；(b) <code>UnlockMemory</code> 获取任意内存读写；(c) <code>AllocateExecutableMemory</code> 分配 RWX 内存；(d) <code>ExportFileFromMpq</code> 从 MPQ 导出 <code>japi.tga</code>；(e) <code>LoadLibrary</code> 加载 DLL；(f) <code>GetProcAddress("call")</code> 获取导出函数；(g) <code>CallCdecl(call, pExportFromMpq)</code> 进入 C++ 世界。</p></div></div>
+
+<div class="flow-item"><div class="flow-num">3</div><div class="flow-content"><h4>japi.dll::call(pExportFromMpq) — JASS VM 上下文建立</h4><p><code>dllmain.cpp:16</code>：计算 <code>pJassEnvAddress = game.dll + 0xBE3740</code>，调用 <code>set_vm_context_from_env()</code> 执行三级指针链 <code>[[[pJassEnvAddress]+20]+144]+4</code> 获取 VM 上下文指针。</p></div></div>
+
+<div class="flow-item"><div class="flow-num">4</div><div class="flow-content"><h4>init_native_registry() — 扫描 + 注册自定义 native</h4><p><code>native_registry.cpp:158</code>：扫描 game.dll <code>.text</code> 段，从 "Deg2Rad" 字符串引用定位第一个 NativeRegBlock，顺序遍历获取全部 1167 个 JASS natives。然后通过 <code>nfunction_add</code> 注册 3 个测试 native（TestAdd, DebugMsg, SayHello）。</p></div></div>
+
+<div class="flow-item"><div class="flow-num">5</div><div class="flow-content"><h4>init_lua_bootstrap() — Lua 引擎引导 + war3map.lua</h4><p><code>lua_bootstrap.cpp:281</code>：创建 <code>lua_State</code>、注册全部 6 个 <code>jass.*</code> 预加载模块、从 MPQ 读取并执行 <code>war3map.lua</code>（用户的游戏逻辑脚本）。</p></div></div>
+
+<h2>4. 模块架构图</h2>
+
+<pre><code>┌─────────────────────────────────────────────────────────┐
+│                    demo.w3x (MPQ)                        │
+│  ┌──────────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ │
+│  │ war3map.j    │ │ callback │ │ japi.tga │ │war3map. │ │
+│  │ (JASS 地图)  │ │ (exploit)│ │(japi.dll)│ │lua      │ │
+│  └──────┬───────┘ └────┬─────┘ └────┬─────┘ └────┬────┘ │
+└─────────┼──────────────┼────────────┼────────────┼───────┘
+          │              │            │            │
+          ▼              ▼            ▼            ▼
+    ┌─────────┐   ┌──────────┐ ┌──────────┐ ┌──────────┐
+    │main()   │──▶│callback  │▶│japi.dll  │▶│Lua VM    │
+    │StartCamp│   │main()    │ │call()    │ │执行      │
+    │aignAI   │   │          │ │          │ │war3map.  │
+    └─────────┘   └──────────┘ └────┬─────┘ │lua       │
+                                    │       └──────────┘
+          ┌─────────────────────────┘
+          ▼
+  ┌───────────────────────────────────────────────┐
+  │              japi.dll 内部结构                  │
+  │                                                │
+  │  dllmain.cpp    ── DLL 入口, call() 导出       │
+  │  jass_vm.cpp    ── PE 扫描, native 发现, VM ctx │
+  │  jass_call.cpp  ── JASS native 调用 trampoline │
+  │  native_registry.cpp ── nfunction_add 注册      │
+  │  lua_bootstrap.cpp ── Lua VM 创建, 模块注册     │
+  │                                                │
+  │  ┌──── lua_runtime.cpp  ── jass.runtime ────┐  │
+  │  ├──── lua_japi.cpp     ── jass.japi  ──────┤  │
+  │  ├──── lua_message.cpp  ── jass.message ────┤  │
+  │  ├──── lua_slk.cpp      ── jass.slk ────────┤  │
+  │  └──── lua_hook.cpp     ── jass.hook ───────┘  │
+  │                                                │
+  │  util/                                         │
+  │  ├── fp_call.h        ── 调用约定封装           │
+  │  ├── memory_protect   ── VirtualProtect RAII   │
+  │  ├── replace_pointer  ── 原子指针替换           │
+  │  └── horrible_cast    ── 类型双关              │
+  │                                                │
+  │  vendor/lua-5.3.6-src/ ── Lua 5.3 静态链接      │
+  └───────────────────────────────────────────────┘
+</code></pre>
+
+<h2>5. 关键设计决策</h2>
+
+<h3>5.1 为何是单 DLL？</h3>
+<p>YDWE 使用五 DLL 链：<code>lua53.dll → ydbase.dll → ydwar3.dll → yd_lua_engine.dll → yd_jass_api.dll</code>。每个 DLL 有独立的导出表、重定位表和 CRT 依赖。japi.dll 将 Lua 5.3 <strong>静态链接</strong>进 DLL，配合 <code>/MT</code>（静态 CRT），产出单个 484KB 的 DLL，零外部依赖（仅需 kernel32.dll 和 Storm.dll）。</p>
+
+<h3>5.2 为何扫描 .text 段而非 Hijack？</h3>
+<p>YDWE 通过 Hijack <code>storm_alloc</code> + <code>TlsGetValue</code> 间接获取 <code>nfunction_add</code> 地址。japi.dll 直接在 game.dll 的 <code>.text</code> 段扫描 20 字节的 <strong>NativeRegBlock</strong> 模式（push/mov edx/mov ecx/call 序列），从 "Deg2Rad" 字符串引用反向定位第一个注册块后顺序遍历。这种方法：(a) 不依赖特定 WC3 版本的硬编码偏移；(b) 自动发现全部 1167 个 natives（vs. YDWE 的硬编码数十个）；(c) 代码量更少。</p>
+
+<h3>5.3 Lua metatable __index vs. Hashtable + UnitId Hook</h3>
+<p>内置 JAPI 使用 hashtable + UnitId hook 实现 native 调度——每次调用需查 hashtable 和 JASS 的 UnitId 网关。japi.dll 使用 Lua 的 <code>metatable __index</code>：所有 1167 个 native 通过 <code>jass.NativeName(...)</code> 直接调用，<code>__index</code> 自动查找并返回 wrapper closure。性能更好（Lua 内部 hash vs. JASS hashtable），语法更自然。</p>
+
+<h3>5.4 fake jstring vs. 原生 create_string</h3>
+<p>JASS VM 内部 jstring 有特定内存布局。japi.dll 实现了手动构造的 <code>string_fake</code> RAII 类（<code>jass_types.h:42</code>）：8 个 uint32_t 的栈上数组，<code>memory_[2]</code> 自引用，<code>memory_[7]</code> 指向 C 字符串。同时通过 "I2S" native 的引用链扫描找到了 game.dll 的真 <code>create_string</code> 函数（<code>__fastcall</code>），用于需要持久生命周期的字符串。</p>
+
+<h2>6. 调用约定一览</h2>
+
+<table>
+<tr><th>函数</th><th>约定</th><th>说明</th></tr>
+<tr><td><code>nfunction_add</code></td><td><code>__fastcall</code></td><td>ecx=func_addr, edx=name, [esp]=param_str</td></tr>
+<tr><td>JASS natives（通用）</td><td>混合 cdecl/stdcall/thiscall</td><td>通过保存/恢复 ESP 统一处理</td></tr>
+<tr><td><code>call</code> (DLL 导出)</td><td><code>__cdecl</code></td><td><code>void call(int pExportFromMpq)</code></td></tr>
+<tr><td><code>create_string</code></td><td><code>__fastcall</code></td><td>ecx=const char* str → jstring_t</td></tr>
+<tr><td><code>japi_dispatcher</code></td><td>naked + custom stack</td><td>JASS params → dispatcher → Lua pcall</td></tr>
+<tr><td>CGameUI vtable[4] filter</td><td><code>__fastcall</code></td><td>ecx=this(CGameUI*), edx=unused, [esp]=msg</td></tr>
+</table>
+
+<h2>7. 调试输出体系</h2>
+
+<table>
+<tr><th>前缀</th><th>源文件</th><th>输出内容</th></tr>
+<tr><td><code>[japi-vm]</code></td><td>jass_vm.cpp</td><td>PE 扫描、native 数量、VM context 地址、create_string 定位</td></tr>
+<tr><td><code>[japi-lua]</code></td><td>lua_bootstrap.cpp</td><td>Lua 引擎状态、模块注册、war3map.lua 加载、脚本错误</td></tr>
+<tr><td><code>[japi-reg]</code></td><td>native_registry.cpp</td><td>nfunction_add 地址、自定义 native 注册</td></tr>
+<tr><td><code>[japi-message]</code></td><td>lua_message.cpp</td><td>vtable hook、convert_xy、order dispatch、hook 错误</td></tr>
+<tr><td><code>[japi-hook]</code></td><td>lua_hook.cpp</td><td>hook 安装/卸载、hook 错误</td></tr>
+<tr><td><code>[japi-slk]</code></td><td>lua_slk.cpp</td><td>SLK 文件加载统计</td></tr>
+<tr><td><code>[japi]</code></td><td>lua_japi.cpp</td><td>JAPI native 注册</td></tr>
+</table>
+
+<p>所有调试输出同时写入：(a) <code>OutputDebugStringA</code>（DebugView 可见）；(b) 控制台（<code>AllocConsole</code> + <code>WriteConsoleA</code>）；(c) <code>japi-debug.log</code> 文件。</p>
+
+<h2>8. 内存布局关键地址（1.27a）</h2>
+
+<table>
+<tr><th>符号</th><th>地址</th><th>说明</th></tr>
+<tr><td><code>nfunction_add</code></td><td><code>game.dll + 0x78913710</code>*</td><td>JASS native 注册函数（__fastcall）</td></tr>
+<tr><td><code>pJassEnvAddress</code></td><td><code>game.dll + 0xBE3740</code></td><td>JASS 环境全局指针</td></tr>
+<tr><td><code>pExportFromMpq</code></td><td><code>game.dll + 0x702C50</code></td><td>MPQ 文件导出函数地址</td></tr>
+<tr><td><code>order_dispatch</code></td><td><code>game.dll + 0x3AE4E0</code></td><td>命令调度函数基址</td></tr>
+<tr><td><code>CGameUI vtable</code></td><td>RTTI 动态定位</td><td><code>find_vtable(".?AVCGameUI@@")</code></td></tr>
+<tr><td><code>CWorldFrameWar3 vtable</code></td><td>RTTI 动态定位</td><td><code>find_vtable(".?AVCWorldFrameWar3@@")</code></td></tr>
+</table>
+<p style="font-size:0.85em;color:var(--text-dim)">* nfunction_add 通过 "StringCase" native 注册块扫描定位，而非硬编码。地址仅供参考验证。</p>
+
+</div>
+</body>
+</html>

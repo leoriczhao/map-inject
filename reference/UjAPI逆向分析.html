@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UjAPI 逆向分析报告 — Warcraft III Unified Jass API</title>
+<style>
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --bg4: #30363d;
+  --fg: #e6edf3; --fg2: #8b949e; --fg3: #6e7681;
+  --accent: #58a6ff; --accent2: #388bfd; --green: #3fb950; --red: #f85149;
+  --orange: #d29922; --purple: #bc8cff; --pink: #f778ba;
+  --border: #30363d; --border2: #21262d;
+  --mono: 'Cascadia Code','Fira Code','JetBrains Mono','Consolas',monospace;
+  --sans: -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans-serif;
+  --serif: Georgia,'Noto Serif SC',serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;min-height:100vh}
+
+/* Layout */
+.wrapper{display:flex;min-height:100vh}
+.sidebar{position:sticky;top:0;width:280px;min-width:280px;height:100vh;background:var(--bg2);border-right:1px solid var(--border);padding:24px 0;overflow-y:auto;z-index:10}
+.sidebar h2{font-size:.7rem;font-weight:600;color:var(--fg3);text-transform:uppercase;letter-spacing:.1em;padding:0 20px 10px;border-bottom:1px solid var(--border);margin-bottom:6px}
+.sidebar nav a{display:block;padding:4px 20px;font-size:.8rem;color:var(--fg2);text-decoration:none;border-left:2px solid transparent;transition:all .15s}
+.sidebar nav a:hover{color:var(--fg);background:var(--bg3)}
+.sidebar nav a.active{color:var(--accent);border-left-color:var(--accent);background:rgba(88,166,255,.06)}
+.main{flex:1;max-width:1100px;padding:40px 48px 100px;overflow-x:hidden}
+
+/* Typography */
+h1{font-family:var(--serif);font-size:2.2rem;margin-bottom:8px;color:var(--fg)}
+h1+p.subtitle{color:var(--fg2);margin-bottom:36px;font-size:1rem}
+h2{font-family:var(--serif);font-size:1.4rem;margin:48px 0 16px;padding-top:16px;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px}
+h3{font-size:1.1rem;margin:28px 0 10px;color:var(--fg)}
+h4{font-size:.95rem;margin:20px 0 8px;color:var(--orange)}
+p{margin-bottom:12px}
+ul,ol{margin:0 0 12px 20px}
+li{margin-bottom:4px}
+code{font-family:var(--mono);font-size:.82em;background:var(--bg3);padding:1px 5px;border-radius:3px}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Cards */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin-bottom:20px}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:20px}
+.card h3{margin-top:0;color:var(--accent);font-size:1rem}
+.card .stat{font-size:2rem;font-weight:700;color:var(--green);display:block;margin-bottom:4px}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:.85rem}
+th{background:var(--bg3);color:var(--fg2);font-weight:600;text-align:left;padding:8px 12px;border:1px solid var(--border)}
+td{padding:6px 12px;border:1px solid var(--border);vertical-align:top}
+tr:nth-child(even){background:var(--bg2)}
+tr:nth-child(odd){background:var(--bg)}
+
+/* Code blocks */
+pre{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px 20px;margin-bottom:16px;overflow-x:auto;font-size:.8rem;line-height:1.6}
+pre code{background:none;padding:0;font-size:inherit}
+.kw{color:#ff7b72} /* keyword */
+.fn{color:#d2a8ff} /* function */
+.str{color:#a5d6ff} /* string */
+.cmt{color:#6e7681;font-style:italic} /* comment */
+.num{color:#79c0ff} /* number */
+.type{color:#7ee787} /* type */
+.op{color:#ff7b72} /* operator */
+
+/* Flow diagram */
+.flow{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:24px;margin-bottom:20px;font-family:var(--mono);font-size:.78rem;line-height:1.8;overflow-x:auto;white-space:pre}
+
+/* Tags/Badges */
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:600;margin-right:4px}
+.badge-blue{background:rgba(88,166,255,.15);color:var(--accent)}
+.badge-green{background:rgba(63,185,80,.15);color:var(--green)}
+.badge-orange{background:rgba(210,153,34,.15);color:var(--orange)}
+.badge-red{background:rgba(248,81,73,.15);color:var(--red)}
+.badge-purple{background:rgba(188,140,255,.15);color:var(--purple)}
+
+/* Alert boxes */
+.note{background:rgba(88,166,255,.08);border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:16px;border-radius:0 6px 6px 0;font-size:.9rem}
+.warn{background:rgba(210,153,34,.08);border-left:3px solid var(--orange);padding:12px 16px;margin-bottom:16px;border-radius:0 6px 6px 0;font-size:.9rem}
+
+/* SVG diagram */
+.diagram-container{text-align:center;margin:24px 0;overflow-x:auto}
+.diagram-container svg{max-width:100%}
+
+/* Stats bar */
+.stats-bar{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.stats-bar .stat-item{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 20px;text-align:center;flex:1;min-width:120px}
+.stats-bar .stat-value{font-size:1.8rem;font-weight:700;color:var(--green)}
+.stats-bar .stat-label{font-size:.75rem;color:var(--fg3);text-transform:uppercase;letter-spacing:.05em}
+
+/* Provenance footer */
+.provenance{margin-top:60px;padding-top:20px;border-top:1px solid var(--border);font-size:.75rem;color:var(--fg3)}
+
+@media(max-width:900px){
+  .wrapper{flex-direction:column}
+  .sidebar{position:relative;width:100%;min-width:0;height:auto;max-height:40vh;border-right:none;border-bottom:1px solid var(--border)}
+  .main{padding:24px 16px 60px}
+  .card-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<!-- ==================== SIDEBAR ==================== -->
+<aside class="sidebar">
+<h2>逆向分析目录</h2>
+<nav>
+  <a href="#overview">概述</a>
+  <a href="#project">项目结构</a>
+  <a href="#architecture">整体架构</a>
+  <a href="#injection">注入流程</a>
+  <a href="#memory-exploit">内存利用机制</a>
+  <a href="#native-dispatch">Native 调度</a>
+  <a href="#type-system">类型系统扩展</a>
+  <a href="#event-system">事件系统扩展</a>
+  <a href="#features">功能模块总览</a>
+  <a href="#feat-bitwise">位运算 & 类型转换</a>
+  <a href="#feat-memory">内存 & VM API</a>
+  <a href="#feat-unit">单位扩展</a>
+  <a href="#feat-ability">技能扩展</a>
+  <a href="#feat-frame">Frame / UI 框架</a>
+  <a href="#feat-damage">伤害系统</a>
+  <a href="#feat-projectile">弹射物系统</a>
+  <a href="#feat-sync">同步 & 网络</a>
+  <a href="#feat-input">输入系统</a>
+  <a href="#feat-d3d">D3D9 覆盖层</a>
+  <a href="#feat-misc">杂项 API</a>
+  <a href="#version">版本支持</a>
+  <a href="#modules">扩展模块</a>
+  <a href="#comparison">对比分析</a>
+  <a href="#changelog">版本历史</a>
+</nav>
+</aside>
+
+<!-- ==================== MAIN ==================== -->
+<main class="main">
+
+<!-- ====== OVERVIEW ====== -->
+<h1 id="overview">UjAPI 逆向分析报告</h1>
+<p class="subtitle">Unryze Jass API — Warcraft III 统一 JASS 扩展 API 深度逆向工程</p>
+
+<div class="stats-bar">
+  <div class="stat-item"><div class="stat-value">2333</div><div class="stat-label">UjAPI.j Natives</div></div>
+  <div class="stat-item"><div class="stat-value">3585</div><div class="stat-label">common.j Natives</div></div>
+  <div class="stat-item"><div class="stat-value">5058</div><div class="stat-label">UjAPI.j 行数</div></div>
+  <div class="stat-item"><div class="stat-value">37+</div><div class="stat-label">版本迭代</div></div>
+  <div class="stat-item"><div class="stat-value">5</div><div class="stat-label">支持的 WC3 版本</div></div>
+</div>
+
+<div class="note">
+<strong>数据来源：</strong>本报告基于 GitHub 仓库 <code>UnryzeC/UjAPI</code> 的完整源码、文档、changelog，以及从 UjAPI.dll（1.9MB）和关联的 YDWE DLL 链中提取的缓存文件进行逆向分析。所有代码引用均指向实际文件。
+</div>
+
+<!-- ====== PROJECT STRUCTURE ====== -->
+<h2 id="project">项目结构</h2>
+
+<pre><code>UjAPI/
+├── README.md
+├── LICENSE
+├── TypeData/                          <span class="cmt">── 游戏数据定义文件</span>
+│   ├── WC3AbilityDataList.txt         <span class="cmt">── 技能数据字段列表</span>
+│   ├── WC3DamageData.txt              <span class="cmt">── 伤害标志位定义</span>
+│   ├── WC3EventDataList.txt           <span class="cmt">── 事件 ID 定义</span>
+│   ├── WC3HandleList.txt              <span class="cmt">── Handle 类型列表</span>
+│   ├── WC3OrdersList.txt              <span class="cmt">── 命令 ID 列表</span>
+│   ├── WC3BaseFrameTypes.txt          <span class="cmt">── Frame 类型定义</span>
+│   └── ... (22 个数据文件)
+├── WorldEditor/                       <span class="cmt">── World Editor 插件</span>
+│   ├── Versions/v1.0.x.x/            <span class="cmt">── 各版本 DLL</span>
+│   └── changelog.txt
+├── Writerside/                        <span class="cmt">── 官方文档（JetBrains Writerside）</span>
+│   └── topics/                        <span class="cmt">── 40+ 篇 API 文档</span>
+├── uJAPIFiles/                        <span class="cmt">── 核心发布文件</span>
+│   ├── UjAPI.j                        <span class="cmt">── 2333 个 native 声明（5058 行）</span>
+│   ├── common.j                       <span class="cmt">── 扩展后的 common.j（3585 个 native）</span>
+│   └── Changelogs/                    <span class="cmt">── 180+ 个版本 changelog</span>
+└── .github/workflows/                 <span class="cmt">── CI 构建</span></code></pre>
+
+<!-- ====== ARCHITECTURE ====== -->
+<h2 id="architecture">整体架构</h2>
+
+<p>UjAPI 是一个<strong>运行时注入型 JASS 扩展框架</strong>，通过独立的加载器（UjAPIApp.exe）在 Warcraft III 启动时将 <code>UjAPI.dll</code> 注入到游戏进程中，hook JASS 虚拟机，注册数千个新的 native 函数。</p>
+
+<div class="diagram-container">
+<svg viewBox="0 0 800 520" xmlns="http://www.w3.org/2000/svg" style="max-width:750px">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#58a6ff"/></marker>
+    <marker id="arrow-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#3fb950"/></marker>
+  </defs>
+  <!-- Boxes -->
+  <rect x="20" y="20" width="160" height="50" rx="6" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="100" y="50" text-anchor="middle" fill="#58a6ff" font-size="13" font-family="sans-serif">UjAPIApp.exe</text>
+  <text x="100" y="64" text-anchor="middle" fill="#8b949e" font-size="10" font-family="sans-serif">加载器 / .NET 4.7.2</text>
+
+  <rect x="240" y="20" width="160" height="50" rx="6" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="320" y="50" text-anchor="middle" fill="#3fb950" font-size="13" font-family="sans-serif">war3.exe / game.dll</text>
+  <text x="320" y="64" text-anchor="middle" fill="#8b949e" font-size="10" font-family="sans-serif">Warcraft III 进程</text>
+
+  <rect x="460" y="20" width="160" height="50" rx="6" fill="#161b22" stroke="#bc8cff" stroke-width="1.5"/>
+  <text x="540" y="50" text-anchor="middle" fill="#bc8cff" font-size="13" font-family="sans-serif">UjAPI.dll</text>
+  <text x="540" y="64" text-anchor="middle" fill="#8b949e" font-size="10" font-family="sans-serif">核心扩展 DLL</text>
+
+  <rect x="640" y="20" width="140" height="50" rx="6" fill="#161b22" stroke="#d29922" stroke-width="1.5"/>
+  <text x="710" y="50" text-anchor="middle" fill="#d29922" font-size="13" font-family="sans-serif">可选模块</text>
+  <text x="710" y="64" text-anchor="middle" fill="#8b949e" font-size="10" font-family="sans-serif">Lua / AngelScript</text>
+
+  <!-- Arrows row 1 -->
+  <line x1="180" y1="45" x2="238" y2="45" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="209" y="38" text-anchor="middle" fill="#8b949e" font-size="9" font-family="sans-serif">CreateProcess</text>
+  <text x="209" y="80" text-anchor="middle" fill="#8b949e" font-size="9" font-family="sans-serif">+ DLL注入</text>
+
+  <line x1="400" y1="45" x2="458" y2="45" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-g)"/>
+  <text x="429" y="38" text-anchor="middle" fill="#8b949e" font-size="9" font-family="sans-serif">LoadLibrary</text>
+
+  <line x1="620" y1="45" x2="638" y2="45" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="629" y="38" text-anchor="middle" fill="#8b949e" font-size="9" font-family="sans-serif">可选</text>
+
+  <!-- JASS VM Hook -->
+  <rect x="240" y="110" width="380" height="50" rx="6" fill="#1c2128" stroke="#f85149" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="430" y="135" text-anchor="middle" fill="#f85149" font-size="12" font-family="sans-serif">JASS VM Hook (nfunction_add)</text>
+  <text x="430" y="150" text-anchor="middle" fill="#8b949e" font-size="10" font-family="sans-serif">拦截 native 注册 → 注入 2333 个扩展函数</text>
+
+  <line x1="540" y1="70" x2="430" y2="108" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Native categories -->
+  <rect x="20" y="200" width="170" height="40" rx="5" fill="#161b22" stroke="#30363d"/>
+  <text x="105" y="224" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="sans-serif">位运算 / 类型转换</text>
+
+  <rect x="200" y="200" width="170" height="40" rx="5" fill="#161b22" stroke="#30363d"/>
+  <text x="285" y="224" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="sans-serif">单位 / 技能 / 物品</text>
+
+  <rect x="380" y="200" width="170" height="40" rx="5" fill="#161b22" stroke="#30363d"/>
+  <text x="465" y="224" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="sans-serif">Frame / UI / D3D9</text>
+
+  <rect x="560" y="200" width="170" height="40" rx="5" fill="#161b22" stroke="#30363d"/>
+  <text x="645" y="224" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="sans-serif">伤害 / 弹射物 / 同步</text>
+
+  <line x1="320" y1="160" x2="105" y2="198" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="380" y1="160" x2="285" y2="198" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="430" y1="160" x2="465" y2="198" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="500" y1="160" x2="645" y2="198" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Callback exploit note -->
+  <rect x="20" y="280" width="760" height="120" rx="8" fill="#1c2128" stroke="#d29922" stroke-width="1"/>
+  <text x="400" y="305" text-anchor="middle" fill="#d29922" font-size="13" font-family="sans-serif" font-weight="600">Callback Exploit 原理（YDWE 遗留机制）</text>
+  <text x="40" y="328" fill="#8b949e" font-size="11" font-family="monospace">1. war3map.j 中调用 StartCampaignAI(Player(12), "callback")</text>
+  <text x="40" y="348" fill="#8b949e" font-size="11" font-family="monospace">2. AI 编译器将 "callback" 作为脚本名加载 → 实际加载 MPQ 中的 callback 文件</text>
+  <text x="40" y="368" fill="#8b949e" font-size="11" font-family="monospace">3. callback 中通过 JASS 类型混淆（l__ 前缀变量）获取任意内存读写</text>
+  <text x="40" y="388" fill="#8b949e" font-size="11" font-family="monospace">4. 利用内存读写 → ExportFileFromMpq + LoadLibrary → 加载 UjAPI.dll</text>
+
+  <!-- Memory layout -->
+  <rect x="20" y="420" width="760" height="80" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="400" y="445" text-anchor="middle" fill="#58a6ff" font-size="12" font-family="sans-serif" font-weight="600">内存布局（1.27a）</text>
+  <text x="40" y="470" fill="#7ee787" font-size="11" font-family="monospace">game.dll + 0xBE3740 = pJassEnvAddress (JASS 环境指针)</text>
+  <text x="40" y="488" fill="#79c0ff" font-size="11" font-family="monospace">[[[pJassEnvAddr]+20]+144]+4 = JASS VM Context</text>
+</svg>
+</div>
+
+<!-- ====== INJECTION FLOW ====== -->
+<h2 id="injection">注入流程</h2>
+
+<p>UjAPI 的注入方式与 YDWE 内置 JAPI 类似，但更独立。它通过 <code>UjAPIApp.exe</code>（.NET 加载器）启动游戏并注入 DLL。</p>
+
+<h3>方式一：UjAPIApp.exe 加载器（官方方式）</h3>
+<div class="flow"><span class="cmt">UjAPIApp.exe (.NET 4.7.2)</span>
+│
+├─ 1. 用户配置 war3.exe 路径
+├─ 2. CreateProcess(war3.exe) → 挂起态启动
+├─ 3. VirtualAllocEx → 在目标进程分配内存
+├─ 4. WriteProcessMemory → 写入 UjAPI.dll 路径
+├─ 5. CreateRemoteThread → 调用 LoadLibrary 加载 UjAPI.dll
+│
+└─ <span class="fn">UjAPI.dll DllMain</span>
+   ├─ 6. Hook game.dll 的 nfunction_add 函数
+   ├─ 7. 拦截所有后续 native 注册
+   ├─ 8. 注入 2333 个扩展 native
+   └─ 9. Hook 事件系统、伤害系统、Frame 系统等</div>
+
+<h3>方式二：MPQ 内嵌（callback 模式）</h3>
+<p>UjAPI.dll 也可以打包进地图 MPQ，通过 callback exploit 的 DLL 加载链自动加载。<strong>此方式在 1.27a 上完全可用</strong>，callback 中有完整的版本检测逻辑：</p>
+
+<pre><code><span class="cmt">// callback::main() 中的版本检测</span>
+set i = ReadRealMemory(GetBytecodeAddress())
+set i = i - ReadRealMemory(i)
+<span class="kw">if</span> i == 2586768 <span class="kw">then</span>       <span class="cmt">→ newInit27a()  // 1.27a ✓</span>
+<span class="kw">elseif</span> i == 5205600 <span class="kw">then</span>   <span class="cmt">→ newInit26()   // 1.26a ✓</span>
+<span class="kw">elseif</span> i == 5276928 <span class="kw">then</span>   <span class="cmt">→ newInit24b()  // 1.24b ✓</span>
+<span class="kw">elseif</span> i == 5276840 <span class="kw">then</span>   <span class="cmt">→ newInit24e()  // 1.24e ✓</span>
+<span class="kw">endif</span>
+
+<span class="cmt">// newUnlockMemory() 中额外支持：</span>
+<span class="kw">if</span> a == 2889044 <span class="kw">then</span>       <span class="cmt">→ newInit27B()  // 1.27b ✓</span>
+<span class="kw">elseif</span> a == 2894996 <span class="kw">then</span>   <span class="cmt">→ newInit28a()  // 1.28a ✓</span></code></pre>
+
+<p>每个版本有独立的偏移量表（pJassEnvAddress、pVirtualAlloc、pExportFromMpq 等），<strong>1.27a 是优先级最高、支持最完整的版本</strong>。</p>
+
+<pre><code><span class="cmt">// callback 中的加载顺序（来自 war3map.j）</span>
+<span class="cmt">// Step 1: 加载 Lua 引擎</span>
+ExportFileFromMpq(<span class="str">"lua53.dll"</span>, <span class="str">"lua53.dll"</span>)     <span class="cmt">→ LoadLibrary</span>
+ExportFileFromMpq(<span class="str">"ydbase.dll"</span>, <span class="str">"ydbase.dll"</span>)   <span class="cmt">→ LoadLibrary</span>
+ExportFileFromMpq(<span class="str">"ydwar3.dll"</span>, <span class="str">"ydwar3.dll"</span>)   <span class="cmt">→ LoadLibrary</span>
+ExportFileFromMpq(<span class="str">"yd_lua_engine.dll"</span>, ...)       <span class="cmt">→ LoadLibrary → Initialize()</span>
+ExportFileFromMpq(<span class="str">"yd_jass_api.dll"</span>, ...)          <span class="cmt">→ LoadLibrary → Initialize()</span>
+
+<span class="cmt">// Step 2: 加载 UjAPI（可选，经典版可能失败）</span>
+ExportFileFromMpq(<span class="str">"UjAPI.dll"</span>, <span class="str">"UjAPI.dll"</span>)     <span class="cmt">→ LoadLibrary</span></code></pre>
+
+<!-- ====== MEMORY EXPLOIT ====== -->
+<h2 id="memory-exploit">内存利用机制</h2>
+
+<p>UjAPI 的核心能力建立在 JASS 虚拟机的<strong>类型混淆漏洞</strong>之上。这是从 YDWE 时代继承的 exploit，通过 jasshelper 的 <code>l__</code> 前缀变量实现。</p>
+
+<h3>类型混淆原理</h3>
+<div class="card">
+<p>JASS 是强类型语言，但 jasshelper（vJASS 编译器）在处理 <code>l__</code> 前缀的局部变量时存在类型混淆：</p>
+<pre><code><span class="cmt">// JASS 中，integer 和 code 是不同类型</span>
+<span class="kw">local integer</span> l__Code    <span class="cmt">// jasshelper 将 l__Code 视为 integer</span>
+<span class="kw">local code</span>    l__Int     <span class="cmt">// jasshelper 将 l__Int 视为 code</span>
+
+<span class="cmt">// 但实际编译后，它们共享同一个栈槽位</span>
+<span class="cmt">// 通过巧妙的函数调用，可以实现类型欺骗：</span>
+<span class="kw">function</span> <span class="fn">setCode</span> <span class="kw">takes</span> code c <span class="kw">returns nothing</span>
+    <span class="kw">set</span> l__Code = c
+    <span class="kw">return</span>  <span class="cmt">// 阻止 jasshelper 内联</span>
+<span class="kw">endfunction</span>
+
+<span class="kw">function</span> <span class="fn">C2I</span> <span class="kw">takes</span> code c <span class="kw">returns</span> integer
+    <span class="kw">call</span> setCode(c)       <span class="cmt">// 写入 l__Code（code 类型）</span>
+    <span class="kw">loop</span>
+        <span class="kw">return</span> l__Code    <span class="cmt">// 读取 l__Code（但此时被当作 integer）</span>
+    <span class="kw">endloop</span>
+    <span class="kw">return</span> 0
+<span class="kw">endfunction</span>
+<span class="cmt">// 结果：code → integer 的任意转换</span></code></pre>
+</div>
+
+<h3>内存读写实现</h3>
+<div class="card">
+<p>通过 <code>Memory[]</code> 数组实现任意地址读写：</p>
+<pre><code><span class="cmt">// Memory 是一个 integer array，其数据区在进程堆中</span>
+<span class="cmt">// 通过 bytecode 操纵，可以将 Memory 的基址映射到任意地址</span>
+
+<span class="cmt">// 步骤 1：通过 JASS bytecode 创建一个新数组</span>
+<span class="cmt">// 步骤 2：利用 SetUnitUserData 将句柄表地址映射到数组索引</span>
+<span class="cmt">// 步骤 3：修改数组的内部指针，使 Memory[] 指向任意地址</span>
+
+<span class="kw">function</span> <span class="fn">ReadRealMemory</span> <span class="kw">takes</span> integer addr <span class="kw">returns</span> integer
+    <span class="kw">if</span> addr / 4 * 4 != addr <span class="kw">then</span>
+        <span class="kw">return</span> ReadRealMemory_FIX(addr)  <span class="cmt">// 非对齐读取</span>
+    <span class="kw">endif</span>
+    <span class="kw">return</span> Memory[addr / 4]             <span class="cmt">// 直接读取</span>
+<span class="kw">endfunction</span>
+
+<span class="kw">function</span> <span class="fn">WriteRealMemory</span> <span class="kw">takes</span> integer addr, integer val <span class="kw">returns nothing</span>
+    <span class="kw">set</span> Memory[addr / 4] = val           <span class="cmt">// 直接写入</span>
+<span class="kw">endfunction</span></code></pre>
+</div>
+
+<h3>可执行内存分配</h3>
+<div class="card">
+<pre><code><span class="cmt">// 通过 hook MergeUnits native 调用 VirtualAlloc</span>
+<span class="kw">function</span> <span class="fn">AllocateExecutableMemory</span> <span class="kw">takes</span> integer size <span class="kw">returns</span> integer
+    <span class="cmt">// hook MergeUnits → VirtualAlloc(addr, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE)</span>
+    <span class="kw">set</span> retval = B2I(MergeUnits(0, size + 4, 0x3000, 0x40))
+    <span class="cmt">// 恢复 MergeUnits 的原始地址</span>
+    <span class="kw">return</span> (retval + 4) / 4 * 4
+<span class="kw">endfunction</span></code></pre>
+</div>
+
+<h3>Native 调用 Trampoline</h3>
+<div class="card">
+<pre><code><span class="cmt">// 在分配的可执行内存中构造 x86 shellcode</span>
+<span class="cmt">// 支持 stdcall / cdecl / fastcall 三种调用约定</span>
+
+<span class="kw">function</span> <span class="fn">CallStdcallWith1Args</span> <span class="kw">takes</span> integer pFunc, integer arg1 <span class="kw">returns</span> integer
+    <span class="cmt">// 写入 shellcode：</span>
+    <span class="cmt">// push ecx; mov ecx,ecx</span>
+    <span class="cmt">// push arg1</span>
+    <span class="cmt">// mov ecx, pFunc</span>
+    <span class="cmt">// call ecx; pop ecx; ret</span>
+    call WriteRealMemory(pReservedExecutableMemory2 + 0,  0x68C98B51)
+    call WriteRealMemory(pReservedExecutableMemory2 + 4,  arg1)
+    call WriteRealMemory(pReservedExecutableMemory2 + 8,  0xB990C98B)
+    call WriteRealMemory(pReservedExecutableMemory2 + 12, pFunc)
+    call WriteRealMemory(pReservedExecutableMemory2 + 16, 0xC359D1FF)
+    <span class="cmt">// 通过 hook IgnoredUnits native 执行 shellcode</span>
+    <span class="kw">set</span> pOffset1 = IgnoredUnits(0)
+    <span class="kw">return</span> pOffset1
+<span class="kw">endfunction</span></code></pre>
+</div>
+
+<!-- ====== NATIVE DISPATCH ====== -->
+<h2 id="native-dispatch">Native 调度机制</h2>
+
+<p>UjAPI 的 native 函数通过 <strong>hashtable dispatch</strong> 模式从 JASS 侧调用 C++ 实现。</p>
+
+<h3>调度流程</h3>
+<div class="flow"><span class="cmt">JASS 调用侧：</span>
+┌─────────────────────────────────────────────────────────────────┐
+│ function EXGetUnitAbility takes unit u, integer abilId returns integer │
+│     call SaveInteger(japi_ht, japi__key, 1, GetHandleId(u))           │
+│     call SaveInteger(japi_ht, japi__key, 2, abilId)                   │
+│     call SaveStr(japi_ht, japi__key, 0, "<span class="str">(II)I</span>")   ← 签名字符串  │
+│     call UnitId("<span class="fn">EXGetUnitAbility</span>")           ← 函数名           │
+│     return LoadInteger(japi_ht, japi__key, 0)   ← 返回值              │
+│ endfunction                                                           │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+<span class="cmt">C++ 侧（UjAPI.dll 中）：</span>
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. UnitId("EXGetUnitAbility") 被 hook                            │
+│ 2. 从 hashtable 读取参数：key=1,2,3...                            │
+│ 3. 解析签名 "(II)I" → 2个integer参数, 返回integer                  │
+│ 4. 查找 native 注册表 → 调用实际 C++ 函数                           │
+│ 5. 将返回值写回 hashtable key=0                                    │
+└─────────────────────────────────────────────────────────────────┘</div>
+
+<h3>签名编码</h3>
+<table>
+<tr><th>字符</th><th>含义</th><th>说明</th></tr>
+<tr><td><code>I</code></td><td>Integer</td><td>32 位整数</td></tr>
+<tr><td><code>R</code></td><td>Real</td><td>浮点数（32 位）</td></tr>
+<tr><td><code>B</code></td><td>Boolean</td><td>布尔值</td></tr>
+<tr><td><code>S</code></td><td>String</td><td>字符串指针</td></tr>
+<tr><td><code>H</code></td><td>Handle</td><td>句柄 ID</td></tr>
+<tr><td><code>V</code></td><td>Void</td><td>无返回值</td></tr>
+</table>
+
+<p>示例：<code>(II)R</code> = 两个 integer 参数，返回 real。<code>(IIIS)V</code> = 三个 integer + 一个 string，无返回值。</p>
+
+<!-- ====== TYPE SYSTEM ====== -->
+<h2 id="type-system">类型系统扩展</h2>
+
+<p>UjAPI 大幅扩展了 JASS 的类型系统，新增了 <strong>40+ 种句柄类型</strong>：</p>
+
+<h3>新增类型继承树</h3>
+<pre><code><span class="type">handle</span>
+├── <span class="type">war3image</span>              <span class="cmt">── 新增：可渲染的游戏对象基类</span>
+│   ├── <span class="type">widget</span>             <span class="cmt">── 有生命值的对象</span>
+│   │   ├── unit
+│   │   ├── item
+│   │   └── destructable
+│   ├── <span class="type">sprite</span>             <span class="cmt">── 新增：精灵对象</span>
+│   ├── <span class="type">projectile</span>         <span class="cmt">── 新增：弹射物对象</span>
+│   ├── <span class="type">doodad</span>             <span class="cmt">── 新增：装饰物对象</span>
+│   ├── <span class="type">effect</span>
+│   └── <span class="type">trackable</span>
+├── <span class="type">mappedtype</span>             <span class="cmt">── 新增：映射类型系统</span>
+│   └── <span class="type">attachmenttype</span>     <span class="cmt">── 附着点类型（chest, head, weapon...）</span>
+│       └── <span class="type">bonetype</span>       <span class="cmt">── 骨骼类型</span>
+├── <span class="type">mapdatatype</span>            <span class="cmt">── 新增：映射数据类型</span>
+│   └── <span class="type">animtype</span>           <span class="cmt">── 动画类型（birth, death, stand...）</span>
+│       └── <span class="type">subanimtype</span>    <span class="cmt">── 子动画类型（63 种）</span>
+├── <span class="type">flagtype</span>               <span class="cmt">── 新增：标志位类型基类</span>
+│   ├── <span class="type">targetflag</span>
+│   ├── <span class="type">damageflag</span>
+│   ├── <span class="type">movetype</span>
+│   ├── <span class="type">collisiontype</span>
+│   ├── <span class="type">abilitytype</span>
+│   └── <span class="type">spriteflag</span>
+├── <span class="type">jassthread</span>             <span class="cmt">── 新增：JASS 线程句柄</span>
+├── <span class="type">handlelist</span>             <span class="cmt">── 新增：句柄列表</span>
+├── <span class="type">textfilehandle</span>         <span class="cmt">── 新增：文本文件句柄</span>
+├── <span class="type">orderhandle</span>            <span class="cmt">── 新增：命令句柄</span>
+├── <span class="type">camerahandle</span>           <span class="cmt">── 新增：3D 相机句柄</span>
+├── <span class="type">projectiletype</span>         <span class="cmt">── 新增：弹射物类型</span>
+└── <span class="type">framehandle</span>            <span class="cmt">── UI Frame 句柄（已有，大量扩展）</span></code></pre>
+
+<!-- ====== EVENT SYSTEM ====== -->
+<h2 id="event-system">事件系统扩展</h2>
+
+<p>UjAPI 新增了大量游戏事件，覆盖了原版 JASS 无法触及的底层回调：</p>
+
+<table>
+<tr><th>事件类别</th><th>新增事件</th><th>说明</th></tr>
+<tr>
+  <td><span class="badge badge-red">伤害</span></td>
+  <td><code>EVENT_UNIT_DAMAGING</code> / <code>EVENT_UNIT_DAMAGED</code></td>
+  <td>可修改伤害值、攻击类型、伤害类型、武器类型</td>
+</tr>
+<tr>
+  <td><span class="badge badge-purple">Buff</span></td>
+  <td><code>EVENT_UNIT_BUFF_RECEIVED</code> / <code>REFRESHED</code> / <code>ENDED</code> / <code>REMOVED</code> / <code>STOLEN</code></td>
+  <td>完整的 Buff 生命周期事件</td>
+</tr>
+<tr>
+  <td><span class="badge badge-blue">技能</span></td>
+  <td><code>EVENT_UNIT_ABILITY_ADDED</code> / <code>REMOVED</code> / <code>AUTOCAST_ON/OFF</code> / <code>LEVEL_CHANGED</code> / <code>COOLDOWN_FINISHED</code> / <code>BLOCKED</code></td>
+  <td>技能的完整生命周期</td>
+</tr>
+<tr>
+  <td><span class="badge badge-green">弹射物</span></td>
+  <td><code>EVENT_UNIT_PROJECTILE_LAUNCH</code> / <code>HIT</code></td>
+  <td>弹射物发射和命中</td>
+</tr>
+<tr>
+  <td><span class="badge badge-orange">输入</span></td>
+  <td><code>EVENT_PLAYER_MOUSE_DOWN/UP/MOVE</code> / <code>KEY/DOWN/UP</code> / <code>WIDGET_CLICK</code> / <code>TERRAIN_CLICK</code></td>
+  <td>完整的鼠标和键盘事件</td>
+</tr>
+<tr>
+  <td><span class="badge badge-blue">游戏</span></td>
+  <td><code>EVENT_GAME_AGENT_DESTROYED</code> / <code>ARRIVAL</code> / <code>CANT_PATH</code> / <code>WARP_START/END</code> / <code>WIDGET_DAMAGING/DAMAGED/DEATH</code> / <code>HACK_DETECTED</code></td>
+  <td>全局游戏事件</td>
+</tr>
+<tr>
+  <td><span class="badge badge-purple">交易</span></td>
+  <td><code>EVENT_PLAYER_TRADE_RESOURCE</code></td>
+  <td>资源交易事件</td>
+</tr>
+</table>
+
+<!-- ====== FEATURES OVERVIEW ====== -->
+<h2 id="features">功能模块总览</h2>
+
+<div class="card-grid">
+<div class="card">
+  <h3>位运算 & 类型转换</h3>
+  <span class="stat">15+</span>
+  <p>BitwiseAND/OR/XOR/NOT/Shift，B2I, C2I, I2SH, HandleToAddress, IntegerToHandle 等</p>
+  <span class="badge badge-blue">基础能力</span>
+</div>
+<div class="card">
+  <h3>内存 & VM API</h3>
+  <span class="stat">30+</span>
+  <p>JASS VM 线程控制、全局/局部变量读写、OperationLimit、ExecuteCode、CallNative</p>
+  <span class="badge badge-red">底层操控</span>
+</div>
+<div class="card">
+  <h3>单位扩展</h3>
+  <span class="stat">236</span>
+  <p>单位数据字段存取、状态修改、碰撞/移动类型、选择控制、朝向、动画</p>
+  <span class="badge badge-green">核心扩展</span>
+</div>
+<div class="card">
+  <h3>技能扩展</h3>
+  <span class="stat">85</span>
+  <p>技能数据读写、冷却控制、自动施法、技能添加/移除、变身数据</p>
+  <span class="badge badge-green">核心扩展</span>
+</div>
+<div class="card">
+  <h3>Frame / UI</h3>
+  <span class="stat">211</span>
+  <p>完整的 Frame API：创建/销毁、定位、文本、颜色、纹理、事件、Sprite 嵌入</p>
+  <span class="badge badge-purple">UI 框架</span>
+</div>
+<div class="card">
+  <h3>伤害系统</h3>
+  <span class="stat">20+</span>
+  <p>伤害事件拦截、攻击/伤害/武器类型修改、暴击检测、额外伤害</p>
+  <span class="badge badge-red">事件驱动</span>
+</div>
+<div class="card">
+  <h3>弹射物系统</h3>
+  <span class="stat">40+</span>
+  <p>弹射物创建/销毁、速度/轨迹控制、视觉效果、来源/目标查询</p>
+  <span class="badge badge-orange">新增系统</span>
+</div>
+<div class="card">
+  <h3>同步 & 网络</h3>
+  <span class="stat">20+</span>
+  <p>变量同步、Hashtable 同步、前缀同步、自定义数据包</p>
+  <span class="badge badge-blue">网络</span>
+</div>
+<div class="card">
+  <h3>输入系统</h3>
+  <span class="stat">15+</span>
+  <p>键盘/鼠标事件、按键状态查询、鼠标位置（屏幕/世界坐标）、滚轮</p>
+  <span class="badge badge-green">交互</span>
+</div>
+<div class="card">
+  <h3>D3D9 覆盖层</h3>
+  <span class="stat">271</span>
+  <p>Image/Sprite 创建与操控、模型加载、动画控制、矩阵变换、材质纹理</p>
+  <span class="badge badge-purple">图形</span>
+</div>
+<div class="card">
+  <h3>数据字段存取</h3>
+  <span class="stat">138</span>
+  <p>通用的 Get/SetXXXField API，覆盖 Ability/Unit/Item/Destructable/Widget 的所有字段</p>
+  <span class="badge badge-blue">数据</span>
+</div>
+<div class="card">
+  <h3>Buff & 效果</h3>
+  <span class="stat">117</span>
+  <p>Buff 查询/修改、效果控制、HandleList 枚举、Hashtable 扩展</p>
+  <span class="badge badge-green">核心扩展</span>
+</div>
+</div>
+
+<!-- ====== FEATURE DETAILS ====== -->
+<h2 id="feat-bitwise">位运算 & 类型转换</h2>
+
+<p>原版 JASS 没有位运算能力，UjAPI 补全了这一关键缺失：</p>
+
+<pre><code><span class="cmt">// 位运算</span>
+native BitwiseGetBit        <span class="kw">takes</span> integer i, integer bitIndex <span class="kw">returns</span> integer
+native BitwiseSetBit        <span class="kw">takes</span> integer i, integer bitIndex, integer bitValue <span class="kw">returns</span> integer
+native BitwiseGetByte       <span class="kw">takes</span> integer i, integer byteIndex <span class="kw">returns</span> integer
+native BitwiseSetByte       <span class="kw">takes</span> integer i, integer byteIndex, integer byteValue <span class="kw">returns</span> integer
+native BitwiseNOT           <span class="kw">takes</span> integer i <span class="kw">returns</span> integer
+native BitwiseAND           <span class="kw">takes</span> integer a, integer b <span class="kw">returns</span> integer
+native BitwiseOR            <span class="kw">takes</span> integer a, integer b <span class="kw">returns</span> integer
+native BitwiseXOR           <span class="kw">takes</span> integer a, integer b <span class="kw">returns</span> integer
+native BitwiseShiftLeft     <span class="kw">takes</span> integer i, integer bitsToShift <span class="kw">returns</span> integer
+native BitwiseShiftRight    <span class="kw">takes</span> integer i, integer bitsToShift <span class="kw">returns</span> integer
+
+<span class="cmt">// 类型转换</span>
+native B2I                  <span class="kw">takes</span> boolean b <span class="kw">returns</span> integer
+native IntToHex             <span class="kw">takes</span> integer i <span class="kw">returns</span> string
+native HexToInt             <span class="kw">takes</span> string hex <span class="kw">returns</span> integer
+native String2Id            <span class="kw">takes</span> string idString <span class="kw">returns</span> integer
+native Id2String            <span class="kw">takes</span> integer i <span class="kw">returns</span> string
+
+<span class="cmt">// Handle 类型转换（70+ 种）</span>
+native IntegerToHandle      <span class="kw">takes</span> integer i <span class="kw">returns</span> handle
+native HandleToAddress      <span class="kw">takes</span> handle h <span class="kw">returns</span> integer
+native HandleToUnit         <span class="kw">takes</span> handle h <span class="kw">returns</span> unit
+native HandleToItem         <span class="kw">takes</span> handle h <span class="kw">returns</span> item
+<span class="cmt">// ... 70+ 种 HandleToXxx 转换</span></code></pre>
+
+<h2 id="feat-memory">内存 & VM API</h2>
+
+<pre><code><span class="cmt">// JASS VM 线程控制</span>
+native GetJassMainThread    <span class="kw">takes</span> nothing <span class="kw">returns</span> jassthread
+native GetJassCurrentThread <span class="kw">takes</span> nothing <span class="kw">returns</span> jassthread
+native RunJassScriptEx      <span class="kw">takes</span> string parent, string helper, string script <span class="kw">returns</span> jassthread
+native StopJassThread       <span class="kw">takes</span> jassthread thread <span class="kw">returns</span> boolean
+
+<span class="cmt">// 全局/局部变量读写（跨线程）</span>
+native GetJassGlobalInteger <span class="kw">takes</span> jassthread thread, string varName <span class="kw">returns</span> integer
+native SetJassGlobalInteger <span class="kw">takes</span> jassthread thread, string varName, integer value <span class="kw">returns</span> boolean
+native GetJassLocalString   <span class="kw">takes</span> string varName <span class="kw">returns</span> string
+
+<span class="cmt">// 执行控制</span>
+native GetOperationLimit    <span class="kw">takes</span> nothing <span class="kw">returns</span> integer
+native SetOperationLimit    <span class="kw">takes</span> integer opLimit <span class="kw">returns</span> nothing
+native GetCodeByName        <span class="kw">takes</span> string funcName <span class="kw">returns</span> code
+native ExecuteCode          <span class="kw">takes</span> code c <span class="kw">returns</span> nothing
+native CallNative           <span class="kw">takes</span> string funcName, string params <span class="kw">returns</span> integer
+
+<span class="cmt">// 句柄系统</span>
+native GetHandleCount       <span class="kw">takes</span> nothing <span class="kw">returns</span> integer
+native GetNextHandleIndex   <span class="kw">takes</span> nothing <span class="kw">returns</span> integer</code></pre>
+
+<h2 id="feat-unit">单位扩展</h2>
+
+<pre><code><span class="cmt">// 碰撞 & 移动类型</span>
+native GetUnitCollisionType     <span class="kw">takes</span> unit u <span class="kw">returns</span> collisiontype
+native SetUnitCollisionType     <span class="kw">takes</span> unit u, collisiontype t <span class="kw">returns</span> nothing
+native GetUnitMoveType          <span class="kw">takes</span> unit u <span class="kw">returns</span> movetype
+native SetUnitMoveType          <span class="kw">takes</span> unit u, movetype t <span class="kw">returns</span> nothing
+
+<span class="cmt">// 数据字段存取（通用 API）</span>
+native GetUnitIntegerField      <span class="kw">takes</span> unit u, unitintegerfield f <span class="kw">returns</span> integer
+native SetUnitIntegerField      <span class="kw">takes</span> unit u, unitintegerfield f, integer v <span class="kw">returns</span> boolean
+native GetUnitRealField         <span class="kw">takes</span> unit u, unitrealfield f <span class="kw">returns</span> real
+native SetUnitRealField         <span class="kw">takes</span> unit u, unitrealfield f, real v <span class="kw">returns</span> boolean
+
+<span class="cmt">// 选择控制</span>
+native SelectUnit               <span class="kw">takes</span> unit u, boolean flag <span class="kw">returns</span> nothing
+native ClearSelection           <span class="kw">takes</span> nothing <span class="kw">returns</span> nothing
+native EnableSelection          <span class="kw">takes</span> boolean enable <span class="kw">returns</span> nothing
+native EnableSelectionCircle    <span class="kw">takes</span> boolean enable <span class="kw">returns</span> nothing</code></pre>
+
+<h2 id="feat-ability">技能扩展</h2>
+
+<pre><code><span class="cmt">// 技能数据读写</span>
+native EXGetUnitAbility         <span class="kw">takes</span> unit u, integer abilId <span class="kw">returns</span> integer
+native EXGetAbilityState        <span class="kw">takes</span> integer abil, integer data_type <span class="kw">returns</span> real
+native EXSetAbilityState        <span class="kw">takes</span> integer abil, integer data_type, real v <span class="kw">returns</span> boolean
+native EXGetAbilityDataInteger  <span class="kw">takes</span> integer abil, integer level, integer data_type <span class="kw">returns</span> integer
+native EXSetAbilityDataInteger  <span class="kw">takes</span> integer abil, integer level, integer data_type, integer v <span class="kw">returns</span> boolean
+
+<span class="cmt">// 技能操控</span>
+native EXSetAbilityAEmeDataA    <span class="kw">takes</span> integer abil, integer value <span class="kw">returns</span> boolean
+native SetUnitAbilityCooldown   <span class="kw">takes</span> unit u, integer abilId, real cooldown <span class="kw">returns</span> nothing
+native GetUnitAbilityCooldown   <span class="kw">takes</span> unit u, integer abilId <span class="kw">returns</span> real</code></pre>
+
+<h2 id="feat-frame">Frame / UI 框架</h2>
+
+<p>UjAPI 提供了完整的自定义 UI 框架，可以创建、修改、销毁游戏内的任何 Frame：</p>
+
+<pre><code><span class="cmt">// Frame 创建</span>
+native CreateFrame          <span class="kw">takes</span> string template, framehandle parent, int prio, int ctx <span class="kw">returns</span> framehandle
+native CreateFrameByType    <span class="kw">takes</span> string type, string name, framehandle parent, string template, int ctx <span class="kw">returns</span> framehandle
+native DestroyFrame         <span class="kw">takes</span> framehandle f <span class="kw">returns</span> nothing
+
+<span class="cmt">// Frame 查询</span>
+native GetFrameByName       <span class="kw">takes</span> string name, int ctx <span class="kw">returns</span> framehandle
+native GetFrameUnderCursor  <span class="kw">takes</span> nothing <span class="kw">returns</span> framehandle
+native GetFrameChild        <span class="kw">takes</span> framehandle f, int index <span class="kw">returns</span> framehandle
+native GetFrameChildrenCount <span class="kw">takes</span> framehandle f <span class="kw">returns</span> integer
+
+<span class="cmt">// Frame 属性</span>
+native SetFrameText         <span class="kw">takes</span> framehandle f, string text <span class="kw">returns</span> nothing
+native SetFrameSize         <span class="kw">takes</span> framehandle f, real w, real h <span class="kw">returns</span> nothing
+native SetFrameTexture      <span class="kw">takes</span> framehandle f, string tex, int id, boolean blend <span class="kw">returns</span> nothing
+native SetFrameFont         <span class="kw">takes</span> framehandle f, string font, real size, int flags <span class="kw">returns</span> nothing
+native SetFrameAlpha        <span class="kw">takes</span> framehandle f, int alpha <span class="kw">returns</span> nothing
+native SetFrameColour       <span class="kw">takes</span> framehandle f, int colour <span class="kw">returns</span> nothing
+native SetFrameEnabled      <span class="kw">takes</span> framehandle f, boolean enabled <span class="kw">returns</span> nothing
+native SetFrameValue        <span class="kw">takes</span> framehandle f, real value <span class="kw">returns</span> nothing
+
+<span class="cmt">// Frame Sprite 嵌入（3D 模型渲染到 UI 中）</span>
+native SetFrameSpriteModel  <span class="kw">takes</span> framehandle f, string model <span class="kw">returns</span> nothing
+native SetFrameSpriteAnimation <span class="kw">takes</span> framehandle f, string anim <span class="kw">returns</span> nothing
+native SetFrameSpriteMatrixPosition <span class="kw">takes</span> framehandle f, real x,y,z <span class="kw">returns</span> nothing
+native SetFrameSpriteMatrixScale <span class="kw">takes</span> framehandle f, real x,y,z <span class="kw">returns</span> nothing</code></pre>
+
+<h2 id="feat-damage">伤害系统</h2>
+
+<p>UjAPI 的伤害系统是其最强大的功能之一，允许在伤害发生的瞬间拦截和修改所有参数：</p>
+
+<pre><code><span class="cmt">// 伤害事件回调中可用的 API</span>
+native GetEventDamageTarget  <span class="kw">takes</span> nothing <span class="kw">returns</span> unit       <span class="cmt">// 被攻击单位</span>
+native GetEventAttackType    <span class="kw">takes</span> nothing <span class="kw">returns</span> attacktype <span class="cmt">// 攻击类型</span>
+native SetEventAttackType    <span class="kw">takes</span> attacktype t <span class="kw">returns</span> boolean  <span class="cmt">// 修改攻击类型</span>
+native GetEventDamageType    <span class="kw">takes</span> nothing <span class="kw">returns</span> damagetype  <span class="cmt">// 伤害类型</span>
+native SetEventDamageType    <span class="kw">takes</span> damagetype t <span class="kw">returns</span> boolean   <span class="cmt">// 修改伤害类型</span>
+native GetEventWeaponType    <span class="kw">takes</span> nothing <span class="kw">returns</span> weapontype  <span class="cmt">// 武器类型</span>
+native SetEventWeaponType    <span class="kw">takes</span> weapontype t <span class="kw">returns</span> boolean   <span class="cmt">// 修改武器类型</span>
+
+native GetEventIsAttack      <span class="kw">takes</span> nothing <span class="kw">returns</span> boolean     <span class="cmt">// 是否为攻击</span>
+native GetEventIsRanged      <span class="kw">takes</span> nothing <span class="kw">returns</span> boolean     <span class="cmt">// 是否为远程</span>
+native GetEventIsCritical    <span class="kw">takes</span> nothing <span class="kw">returns</span> boolean     <span class="cmt">// 是否暴击</span>
+
+native GetEventPreDamage     <span class="kw">takes</span> nothing <span class="kw">returns</span> real        <span class="cmt">// 原始伤害值</span>
+native SetEventDamage        <span class="kw">takes</span> real damage <span class="kw">returns</span> nothing  <span class="cmt">// 修改最终伤害</span>
+native GetEventDamageFlags   <span class="kw">takes</span> nothing <span class="kw">returns</span> integer     <span class="cmt">// 伤害标志位</span></code></pre>
+
+<h2 id="feat-projectile">弹射物系统</h2>
+
+<pre><code><span class="cmt">// 弹射物创建与操控</span>
+native CreateProjectile          <span class="kw">takes</span> unit source, string model <span class="kw">returns</span> projectile
+native DestroyProjectile         <span class="kw">takes</span> projectile p <span class="kw">returns</span> nothing
+
+native GetProjectileSource       <span class="kw">takes</span> projectile p <span class="kw">returns</span> unit
+native GetProjectileTarget       <span class="kw">takes</span> projectile p <span class="kw">returns</span> unit
+native GetProjectileSpeed        <span class="kw">takes</span> projectile p <span class="kw">returns</span> real
+native SetProjectileSpeed        <span class="kw">takes</span> projectile p, real speed <span class="kw">returns</span> nothing
+
+native IsProjectileType          <span class="kw">takes</span> projectile p, projectiletype t <span class="kw">returns</span> boolean
+native EnumProjectilesInRect     <span class="kw">takes</span> rect r, boolexpr filter, code handler <span class="kw">returns</span> nothing</code></pre>
+
+<h2 id="feat-sync">同步 & 网络</h2>
+
+<pre><code><span class="cmt">// 变量同步</span>
+native SyncInteger               <span class="kw">takes</span> string varName <span class="kw">returns</span> nothing
+native SyncReal                  <span class="kw">takes</span> string varName <span class="kw">returns</span> nothing
+native SyncString                <span class="kw">takes</span> string varName <span class="kw">returns</span> nothing
+native GetSyncedInteger          <span class="kw">takes</span> nothing <span class="kw">returns</span> integer
+
+<span class="cmt">// Hashtable 同步</span>
+native SyncSavedInteger          <span class="kw">takes</span> hashtable ht, int parent, int child <span class="kw">returns</span> nothing
+native TriggerRegisterPlayerHashtableDataSyncEvent ...
+
+<span class="cmt">// 自定义数据包</span>
+native SendSyncData              <span class="kw">takes</span> string prefix, string data <span class="kw">returns</span> boolean
+native TriggerRegisterPlayerSyncEvent ...</code></pre>
+
+<h2 id="feat-input">输入系统</h2>
+
+<pre><code><span class="cmt">// 键盘</span>
+native IsKeyPressed              <span class="kw">takes</span> oskeytype key <span class="kw">returns</span> boolean
+native GetTriggerPlayerKey       <span class="kw">takes</span> nothing <span class="kw">returns</span> oskeytype
+native GetTriggerPlayerMetaKey   <span class="kw">takes</span> nothing <span class="kw">returns</span> integer  <span class="cmt">// Ctrl/Shift/Alt</span>
+
+<span class="cmt">// 鼠标</span>
+native IsMouseKeyPressed         <span class="kw">takes</span> mousebuttontype btn <span class="kw">returns</span> boolean
+native GetTriggerPlayerMouseScreenX/Y  <span class="kw">takes</span> nothing <span class="kw">returns</span> real
+native GetTriggerPlayerMouseWorldX/Y/Z <span class="kw">takes</span> nothing <span class="kw">returns</span> real
+native GetWheelDelta             <span class="kw">takes</span> nothing <span class="kw">returns</span> integer
+
+<span class="cmt">// 事件注册</span>
+native TriggerRegisterPlayerKeyEvent ...
+native TriggerRegisterPlayerMouseEvent ...</code></pre>
+
+<h2 id="feat-d3d">D3D9 覆盖层（Image/Sprite）</h2>
+
+<p>UjAPI 提供了强大的 D3D9 图形覆盖层 API，可以在游戏画面上渲染自定义图像和 3D 模型：</p>
+
+<pre><code><span class="cmt">// Image API</span>
+native CreateImage          <span class="kw">takes</span> string file, real w, real h, real x,y,z, ...
+native DestroyImage         <span class="kw">takes</span> image img <span class="kw">returns</span> nothing
+native SetImagePosition     <span class="kw">takes</span> image img, real x, real y, real z <span class="kw">returns</span> nothing
+native SetImageRender       <span class="kw">takes</span> image img, boolean flag <span class="kw">returns</span> nothing
+native SetImageColour       <span class="kw">takes</span> image img, int colour <span class="kw">returns</span> nothing
+
+<span class="cmt">// Sprite API（3D 模型渲染）</span>
+native CreateSprite         <span class="kw">takes</span> string model <span class="kw">returns</span> sprite
+native DestroySprite        <span class="kw">takes</span> sprite s <span class="kw">returns</span> nothing
+native SetSpriteModel       <span class="kw">takes</span> sprite s, string model <span class="kw">returns</span> nothing
+native SetSpriteAnimation   <span class="kw">takes</span> sprite s, string anim <span class="kw">returns</span> nothing
+native SetSpritePosition    <span class="kw">takes</span> sprite s, real x,y,z <span class="kw">returns</span> nothing
+native SetSpriteScale       <span class="kw">takes</span> sprite s, real scale <span class="kw">returns</span> nothing
+native SetSpriteFlag        <span class="kw">takes</span> sprite s, spriteflag flag <span class="kw">returns</span> nothing
+
+<span class="cmt">// 3D Camera API（用于模型渲染）</span>
+native CameraCreate         <span class="kw">takes</span> nothing <span class="kw">returns</span> camerahandle
+native CameraSetPosition    <span class="kw">takes</span> camerahandle c, real x,y,z <span class="kw">returns</span> nothing
+native CameraSetTargetPosition ...
+native CameraSetDistance / AngleOfAttack / FieldOfView / Roll / Rotation ...</code></pre>
+
+<h2 id="feat-misc">杂项 API</h2>
+
+<pre><code><span class="cmt">// 数学扩展</span>
+native MathRound / MathRealRound / Floor / Ceil / Abs / Log / Ln / Modulo
+native MathSinDeg / MathCosDeg / MathTanDeg   <span class="cmt">// 度数制三角函数</span>
+native MathPointProjectionX / Y               <span class="cmt">// 点投影</span>
+native MathAngleBetweenPoints / DistanceBetweenPoints
+
+<span class="cmt">// 字符串扩展</span>
+native StringContains / Find / FindFirstOf / Count / Trim / Reverse / Replace / Insert
+native StringEncrypt / Decrypt / ToBase64 / FromBase64
+
+<span class="cmt">// 文本文件 I/O</span>
+native TextFileOpen / ReadLine / ReadAllLines / WriteLine / Close / Delete
+
+<span class="cmt">// 调试</span>
+native ConsoleEnable / ConsolePrint / ConsolePause
+
+<span class="cmt">// 游戏数据修改</span>
+native GetMiscDataString / SetMiscDataString   <span class="cmt">// 修改 MiscData.txt</span>
+native GetSkinDataString / SetSkinDataString   <span class="cmt">// 修改 SkinData</span>
+native GetFDFDataString / SetFDFDataString     <span class="cmt">// 修改 Frame 定义</span>
+
+<span class="cmt">// 地形</span>
+native GetAxisZ / GetTerrainFlagsAt / GetWaterLevelAt / GetWaterDepthAt
+
+<span class="cmt">// 版本信息</span>
+native GetUjAPIVersion / GetGameVersion / GetLocale / GetFPS</code></pre>
+
+<!-- ====== VERSION SUPPORT ====== -->
+<h2 id="version">版本支持</h2>
+
+<table>
+<tr><th>版本</th><th>完整版本号</th><th>支持状态</th><th>优先级</th><th>图形</th></tr>
+<tr><td>1.24b</td><td>1.24.4.6352</td><td><span class="badge badge-green">完全</span></td><td>中</td><td>D3D8</td></tr>
+<tr><td>1.24e</td><td>1.24.4.6387</td><td><span class="badge badge-green">完全</span></td><td>中</td><td>D3D8</td></tr>
+<tr><td>1.26a</td><td>1.26.0.6401</td><td><span class="badge badge-green">完全</span></td><td>高</td><td>D3D8</td></tr>
+<tr><td><strong>1.27a</strong></td><td>1.27.0.52240</td><td><span class="badge badge-green">完全</span></td><td><strong>最高</strong></td><td>D3D9</td></tr>
+<tr><td>1.27b</td><td>1.27.1.7085</td><td><span class="badge badge-green">完全</span></td><td>最低</td><td>D3D9</td></tr>
+<tr><td>1.28b</td><td>1.28.5.7680</td><td><span class="badge badge-green">完全</span></td><td>低</td><td>D3D9</td></tr>
+</table>
+
+<div class="note">
+<strong>图形限制：</strong>所有 D3D9 图形特性（Image/Sprite/Font/Texture 覆盖层）仅在使用 DirectX 9 的版本（1.27a+）上可用。1.24/1.26 使用 D3D8，不支持图形覆盖层。
+</div>
+
+<!-- ====== MODULES ====== -->
+<h2 id="modules">扩展模块</h2>
+
+<p>UjAPI 支持通过附加 DLL 扩展功能：</p>
+
+<table>
+<tr><th>模块</th><th>作者</th><th>功能</th></tr>
+<tr><td><code>MultiWindow.dll</code></td><td>Unryze</td><td>允许多开 Warcraft</td></tr>
+<tr><td><code>FastMenu.dll</code></td><td>Unryze</td><td>加速菜单 UI 动画</td></tr>
+<tr><td><code>UnlockMapSize.dll</code></td><td>Unryze</td><td>移除地图大小限制（1/4/8/256MB）</td></tr>
+<tr><td><code>AngelScript.dll</code></td><td>Unryze</td><td>添加 C++ 语法脚本语言</td></tr>
+<tr><td><code>war3_lua.dll</code></td><td>Ev3nt</td><td>添加 Lua 脚本语言支持</td></tr>
+</table>
+
+<!-- ====== COMPARISON ====== -->
+<h2 id="comparison">对比分析</h2>
+
+<table>
+<tr><th>维度</th><th>原版 JASS</th><th>YDWE 内置 JAPI</th><th>UjAPI</th><th>japi.dll（本项目）</th></tr>
+<tr>
+  <td>加载方式</td>
+  <td>—</td>
+  <td>5 DLL 链式加载</td>
+  <td>UjAPIApp.exe 注入</td>
+  <td>callback exploit 单 DLL</td>
+</tr>
+<tr>
+  <td>Native 数量</td>
+  <td>~1167</td>
+  <td>~100 扩展</td>
+  <td><strong>2333 扩展</strong></td>
+  <td>~1167 + 自定义</td>
+</tr>
+<tr>
+  <td>位运算</td>
+  <td>无</td>
+  <td>无</td>
+  <td><span class="badge badge-green">完整</span></td>
+  <td>Lua 原生支持</td>
+</tr>
+<tr>
+  <td>伤害修改</td>
+  <td>无</td>
+  <td>基础</td>
+  <td><span class="badge badge-green">完整</span></td>
+  <td>Lua 回调</td>
+</tr>
+<tr>
+  <td>Frame API</td>
+  <td>无</td>
+  <td>无</td>
+  <td><span class="badge badge-green">完整</span></td>
+  <td>Lua 模块</td>
+</tr>
+<tr>
+  <td>弹射物系统</td>
+  <td>无</td>
+  <td>无</td>
+  <td><span class="badge badge-green">完整</span></td>
+  <td>无</td>
+</tr>
+<tr>
+  <td>D3D9 覆盖层</td>
+  <td>无</td>
+  <td>无</td>
+  <td><span class="badge badge-green">完整</span></td>
+  <td>无</td>
+</tr>
+<tr>
+  <td>脚本语言</td>
+  <td>JASS/vJASS</td>
+  <td>JASS + Lua</td>
+  <td>JASS + 可选 Lua/AngelScript</td>
+  <td>JASS + Lua 5.3</td>
+</tr>
+<tr>
+  <td>版本支持</td>
+  <td>全版本</td>
+  <td>1.24-1.28</td>
+  <td>1.24b-1.28b</td>
+  <td>1.24b-1.28b</td>
+</tr>
+<tr>
+  <td>开源</td>
+  <td>—</td>
+  <td>部分</td>
+  <td>JASS 层开源，DLL 闭源</td>
+  <td>完全开源</td>
+</tr>
+</table>
+
+<!-- ====== CHANGELOG ====== -->
+<h2 id="changelog">版本历史（关键里程碑）</h2>
+
+<table>
+<tr><th>版本</th><th>日期</th><th>关键变更</th></tr>
+<tr><td>v1.0.1.9</td><td>早期</td><td>初始发布，基础 native 扩展</td></tr>
+<tr><td>v1.0.10.49</td><td>—</td><td>Frame API 初步实现</td></tr>
+<tr><td>v1.0.20.84</td><td>—</td><td>伤害系统扩展</td></tr>
+<tr><td>v1.0.29.107</td><td>—</td><td>弹射物系统</td></tr>
+<tr><td>v1.0.40.147</td><td>—</td><td>D3D9 覆盖层</td></tr>
+<tr><td>v1.1.0.152</td><td>—</td><td>重大版本，重构类型系统</td></tr>
+<tr><td>v1.1.10.192</td><td>—</td><td>Camera API、Sprite 扩展</td></tr>
+<tr><td>v1.1.20.244</td><td>—</td><td>JASS VM API、线程控制</td></tr>
+<tr><td>v1.1.30.300</td><td>—</td><td>同步 API 扩展</td></tr>
+<tr><td>v1.1.37.368</td><td>最新</td><td>鼠标事件修复、geoset 限制提升至 100000</td></tr>
+</table>
+
+<!-- ====== PROVENANCE ====== -->
+<div class="provenance">
+<strong>数据来源与分析范围：</strong><br>
+- GitHub 仓库：<code>UnryzeC/UjAPI</code>（main 分支，完整克隆）<br>
+- 分析文件：UjAPI.j（5058 行，2333 natives）、common.j（3585 natives）、40+ 篇 Writerside 文档、180+ 个 changelog、22 个 TypeData 文件<br>
+- 缓存文件：UjAPI.dll（1.9MB）、callback（37KB）、main.lua、war3map.j<br>
+- 参考文档：docs/architecture/ARCHITECTURE.md、docs/reference/REFERENCES.md<br>
+- 生成时间：2026-05-29
+</div>
+
+</main>
+</div>
+
+<!-- Sidebar active state -->
+<script>
+const links = document.querySelectorAll('.sidebar nav a');
+const sections = [];
+links.forEach(a => {
+  const id = a.getAttribute('href').slice(1);
+  const el = document.getElementById(id);
+  if (el) sections.push({id, el, link: a});
+});
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    const s = sections.find(s => s.id === e.target.id);
+    if (s) s.link.classList.toggle('active', e.isIntersecting);
+  });
+}, {rootMargin: '-20% 0px -70% 0px'});
+sections.forEach(s => observer.observe(s.el));
+</script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+﻿STRING 2
+{
+玩家 1
+}
+
+STRING 3
+{
+队伍 1
+}
+
+STRING 4
+{
+内置Japi1.34
+}
+
+STRING 6
+{
+作者：问号 
+}
+
+STRING 7
+{
+作者：问号 
+}
+
+STRING 8
+{
+玩家 2
+}
+
+STRING 26
+{
+内置Japi1.34版
+}
+
+STRING 45
+// 技能: A000 (命令移动技能), Name (名字[anam])
+{
+命令移动技能
+}
+
+STRING 46
+// 技能: A000 (命令移动技能), Researchtip (提示工具 - 学习[aret])
+{
+命令移动技能
+}
+
+STRING 47
+// 技能: A000 (命令移动技能), Researchubertip (提示工具 - 学习 - 扩展[arut])
+{
+命令移动技能
+}
+
+STRING 48
+// 技能: A000 (命令移动技能), YDWEtip (YDWE友情提示[Ytip])
+{
+命令移动技能
+}
+
+STRING 49
+{
+魔兽版本:1.24b
+}
+
+STRING 50
+{
+魔兽版本:1.24e
+}
+
+STRING 51
+{
+魔兽版本:1.26
+}
+
+STRING 52
+{
+魔兽版本:1.27a
+}
+
+STRING 53
+{
+魔兽版本:1.27b
+}
+
+STRING 54
+{
+魔兽版本:1.28a
+}
+
+STRING 55
+{
+作者 问号
+}
+
+STRING 56
+{
+作者 问号
+}
+
+STRING 57
+{
+你已经断开了连接。111
+}
+

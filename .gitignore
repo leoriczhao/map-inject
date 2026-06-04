@@ -1,0 +1,25 @@
+# Build outputs
+build/
+src/build/
+src/build10/
+
+# DLL output
+*.dll
+*.tga
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Claude Code
+.claude/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Reference: ignored subdirs (submodules or not needed)
+reference/ujapi/
+reference/old-japi/

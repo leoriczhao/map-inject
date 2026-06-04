@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YDWE LuaEngine 注入与双虚拟机架构分析</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/x86asm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --paper: #faf7f2;
+  --paper2: #f3efe8;
+  --paper3: #ebe6dc;
+  --border: #e0d9cc;
+  --border2: #d4ccbb;
+  --fg: #2d2a24;
+  --fg2: #6b6356;
+  --fg3: #949084;
+  --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,.06);
+  --amber: #cc5020;
+  --amber-light: #faf0e6;
+  --amber-bg: rgba(204,80,32,.07);
+  --blue: #1a6fb5;
+  --green: #2e7d32;
+  --purple: #7b4fa0;
+  --red: #b53228;
+  --sidebar-w: 260px;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+  --font-serif: Georgia, 'Noto Serif SC', '宋体', serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-sans);
+  background: var(--paper);
+  color: var(--fg);
+  line-height: 1.7;
+  display: flex;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Sidebar ── */
+#sidebar {
+  position: sticky; top: 0;
+  width: var(--sidebar-w); min-width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--paper2);
+  border-right: 1px solid var(--border);
+  padding: 28px 0;
+  overflow-y: auto;
+  z-index: 10;
+}
+#sidebar h2 {
+  font-family: var(--font-sans);
+  font-size: 0.75rem; font-weight: 600;
+  color: var(--fg3); text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 0 20px 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+#sidebar nav a {
+  display: block;
+  padding: 7px 20px;
+  font-size: 0.87rem; color: var(--fg2); text-decoration: none;
+  border-left: 2px solid transparent;
+  transition: all .15s;
+}
+#sidebar nav a:hover { color: var(--fg); background: var(--paper3); }
+#sidebar nav a.active {
+  color: var(--amber); border-left-color: var(--amber); background: var(--amber-bg);
+  font-weight: 500;
+}
+#sidebar nav a.sub { padding-left: 36px; font-size: 0.81rem; }
+
+/* ── Main ── */
+#main {
+  flex: 1;
+  max-width: 920px;
+  padding: 48px 52px 80px;
+  overflow-x: hidden;
+}
+h1 {
+  font-family: var(--font-serif);
+  font-size: 2.1rem; font-weight: 700;
+  margin-bottom: 6px; color: #1a1714;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+h1 + p {
+  color: var(--fg2); margin-bottom: 40px;
+  font-size: 1rem; line-height: 1.5;
+}
+h2 {
+  font-family: var(--font-serif);
+  font-size: 1.35rem; font-weight: 600;
+  margin: 52px 0 14px; padding-top: 12px;
+  color: #1a1714;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+  letter-spacing: -0.005em;
+}
+h3 {
+  font-size: 1.08rem; font-weight: 600;
+  margin: 32px 0 10px; color: #2d2a24;
+}
+h4 { font-size: 0.95rem; font-weight: 600; margin: 20px 0 6px; color: #3d3a34; }
+
+p { margin: 10px 0; }
+a { color: var(--amber); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { color: #1a1714; }
+code {
+  font-family: var(--font-mono); font-size: 0.85em;
+  background: var(--paper3); padding: 2px 7px; border-radius: 4px;
+  color: #5c3a1e;
+}
+pre {
+  margin: 18px 0; border-radius: 8px; overflow-x: auto;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  background: #fffefc;
+}
+pre code { background: none; padding: 0; font-size: 0.8rem; line-height: 1.6; color: #2d2a24; }
+
+/* highlight.js warm theme override */
+.hljs {
+  background: #fffefc !important; color: #2d2a24 !important;
+}
+.hljs-keyword, .hljs-selector-tag, .hljs-type { color: #8b3a1a !important; }
+.hljs-string, .hljs-addition { color: #4a6e3a !important; }
+.hljs-comment, .hljs-quote { color: #a09888 !important; font-style: italic; }
+.hljs-number, .hljs-literal { color: #b5651e !important; }
+.hljs-built_in, .hljs-title.class_ { color: #6b4fa0 !important; }
+.hljs-meta { color: #8b6b3a !important; }
+.hljs-attr, .hljs-attribute { color: #b5651e !important; }
+.hljs-function, .hljs-title { color: #3d6e8c !important; }
+
+blockquote {
+  margin: 18px 0;
+  padding: 14px 18px;
+  border-left: 3px solid var(--amber);
+  background: var(--amber-light);
+  border-radius: 0 6px 6px 0;
+  color: var(--fg2);
+  font-size: 0.9rem;
+}
+
+/* ── Cards ── */
+.card {
+  background: #fffefc;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px 26px;
+  margin: 16px 0;
+  box-shadow: var(--shadow);
+}
+.card h4 { margin-top: 0; color: #1a1714; }
+
+/* ── Tables ── */
+table {
+  width: 100%; border-collapse: collapse; margin: 18px 0;
+  font-size: 0.88rem; background: #fffefc;
+  border-radius: 8px; overflow: hidden;
+  box-shadow: var(--shadow); border: 1px solid var(--border);
+}
+thead th {
+  background: var(--paper2); color: #1a1714; font-weight: 600;
+  padding: 11px 16px; text-align: left;
+  border-bottom: 2px solid var(--border2);
+  font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em;
+}
+tbody td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:nth-child(even) { background: var(--paper); }
+tbody tr:hover { background: var(--amber-bg); }
+td:first-child code { background: none; color: var(--amber); font-weight: 500; }
+
+/* ── Collapsible ── */
+details {
+  margin: 18px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+summary {
+  padding: 15px 22px;
+  cursor: pointer;
+  background: #fffefc;
+  font-weight: 600;
+  font-size: 0.93rem;
+  color: #2d2a24;
+  user-select: none;
+  list-style: none;
+  transition: background .12s;
+}
+summary:hover { background: var(--paper); }
+summary::-webkit-details-marker { display: none; }
+summary::before {
+  content: '› ';
+  color: var(--amber); font-size: 1.1rem; font-weight: 700;
+  margin-right: 6px; transition: transform .2s; display: inline-block;
+}
+details[open] summary::before { transform: rotate(90deg); }
+details[open] summary { border-bottom: 1px solid var(--border); }
+details .inner { padding: 18px 22px; background: #fffefc; }
+
+/* ── Mermaid ── */
+.mermaid-wrap {
+  background: #fffefc;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 28px;
+  margin: 18px 0;
+  overflow-x: auto;
+  box-shadow: var(--shadow);
+}
+.mermaid-wrap .mermaid { display: flex; justify-content: center; }
+
+/* ── Phase indicator ── */
+.phase-badge {
+  display: inline-block;
+  padding: 3px 11px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-right: 8px;
+  letter-spacing: 0.02em;
+}
+.phase-1 { background: rgba(26,111,181,.1); color: var(--blue); }
+.phase-2 { background: rgba(123,79,160,.1); color: var(--purple); }
+.phase-3 { background: rgba(46,125,50,.1); color: var(--green); }
+.phase-4 { background: rgba(181,50,40,.1); color: var(--red); }
+
+/* ── File path ── */
+.file-path {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  color: var(--fg2);
+  background: var(--paper3);
+  padding: 3px 11px;
+  border-radius: 4px;
+  display: inline-block;
+  margin: 2px 4px 2px 0;
+  border: 1px solid var(--border);
+}
+
+/* ── Key insight ── */
+.insight {
+  background: var(--amber-light);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin: 18px 0;
+  font-size: 0.9rem;
+  color: #4a3520;
+}
+.insight::before { content: '💡 '; font-size: 0.85rem; }
+.insight code { background: rgba(204,80,32,.08); color: #7a3a18; }
+
+/* ── Two column ── */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 16px 0; }
+@media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+
+/* ── Responsive ── */
+@media (max-width: 860px) {
+  body { flex-direction: column; }
+  #sidebar {
+    position: relative; width: 100%; min-width: 0; height: auto; max-height: 40vh;
+    border-right: none; border-bottom: 1px solid var(--border);
+  }
+  #main { padding: 28px 22px 60px; }
+}
+@media (max-width: 480px) {
+  h1 { font-size: 1.6rem; }
+  h2 { font-size: 1.2rem; }
+}
+
+/* ── Footer ── */
+footer {
+  margin-top: 72px; padding-top: 24px;
+  border-top: 1px solid var(--border);
+  color: var(--fg3); font-size: 0.8rem;
+}
+footer span { margin-right: 28px; }
+
+/* Print */
+@media print {
+  #sidebar { display: none; }
+  #main { max-width: 100%; padding: 20px; }
+  body { background: #fff; color: #000; }
+  .card, pre, .mermaid-wrap, details { box-shadow: none; }
+}
+</style>
+</head>
+<body>
+
+<aside id="sidebar">
+  <h2>导航目录</h2>
+  <nav>
+    <a href="#overview">一、总体概述</a>
+    <a href="#phase1" class="sub">二、进程启动与注入</a>
+    <a href="#phase2" class="sub">三、Lua 引导系统</a>
+    <a href="#phase3" class="sub">四、JASS-Lua 桥接</a>
+    <a href="#phase4" class="sub">五、双虚拟机运行时</a>
+    <a href="#sequence" class="sub">六、完整时序图</a>
+    <a href="#summary" class="sub">七、技术总结</a>
+    <a href="#index" class="sub">八、源文件索引</a>
+  </nav>
+</aside>
+
+<main id="main">
+
+<h1>YDWE LuaEngine 注入与双虚拟机架构分析</h1>
+<p>从进程注入到双虚拟机并行运行 —— 完整技术链路拆解。分析基于源码阅读，涵盖 <strong>21 个核心源文件</strong>。</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<section id="overview">
+<h2>一、总体概述</h2>
+
+<p>YDWE 在<strong>不修改 Game.dll 二进制文件</strong>的前提下，通过<strong>代码洞注入</strong>将一个完整的 Lua 5.4 运行时注入到 <code>war3.exe</code> 进程中，与 Warcraft III 原生的 JASS 虚拟机并行运行，形成"双虚拟机"架构。</p>
+
+<div class="cols">
+  <div class="card">
+    <h4>四个阶段的流水线</h4>
+    <p><span class="phase-badge phase-1">Phase 1</span> <strong>进程注入</strong> — war3.exe 挂起创建，shellcode 注入 LuaEngine.dll</p>
+    <p><span class="phase-badge phase-2">Phase 2</span> <strong>Lua 引导</strong> — war3/main.lua 通过 IAT Hook 拦截 Game.dll 加载</p>
+    <p><span class="phase-badge phase-3">Phase 3</span> <strong>桥接建立</strong> — yd_lua_engine.dll 构建 JASS↔Lua 双向通道</p>
+    <p><span class="phase-badge phase-4">Phase 4</span> <strong>双 VM 运行</strong> — JASS 与 Lua 通过 trampoline/coroutine 并发</p>
+  </div>
+  <div class="card">
+    <h4>核心不变量</h4>
+    <p>✅ 不修改 Game.dll 任何字节</p>
+    <p>✅ 不依赖 CreateRemoteThread（规避反外挂）</p>
+    <p>✅ 支持 1.27a/b 等多版本（运行时模式匹配）</p>
+    <p>✅ 纯 Lua 地图 + JASS/Lua 混合地图双模式</p>
+  </div>
+</div>
+
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart LR
+  A["YDWE.exe"] -->|"加载"| B["YDWEStartup.dll"]
+  B -->|"CreateProcess<br/>SUSPENDED"| C["war3.exe<br/>(挂起)"]
+  C -->|"Code Cave<br/>注入"| D["LuaEngine.dll"]
+  D -->|"require main"| E["war3/main.lua"]
+  E -->|"IAT Hook<br/>LoadLibraryA"| F["Game.dll 加载"]
+  F -->|"扫描加载"| G["yd_lua_engine.dll"]
+  G -->|"virtual_mpq<br/>watch"| H["war3map.lua"]
+  H -->|"双VM并行"| I["JASS VM ⇄ Lua VM"]
+</div>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<section id="phase1">
+<h2>二、第一阶段：进程启动与代码洞注入</h2>
+
+<h3>2.1 启动流程</h3>
+
+<pre><code class="language-plaintext">YDWE.exe
+  └─ 加载 YDWEStartup.dll，调用 YDWEStartup() 导出函数
+       └─ launch_warcraft3()
+            ├─ 设置环境变量 ydwe-process-name = "war3"
+            ├─ bee::subprocess::spawn.suspended() → 创建挂起的 war3.exe 进程
+            ├─ [可选] hook::replacedll("Storm.dll") → 替换 Storm.dll
+            ├─ hook::injectdll(pi, "bin/LuaEngine.dll") → 代码洞注入
+            └─ ResumeThread() → 恢复主线程</code></pre>
+
+<div class="file-path">Development/Core/YDWE/Main.cpp</div>
+<div class="file-path">Development/Core/YDWEStartup/LaunchWarcraft3.cpp</div>
+
+<h3>2.2 代码洞注入机制</h3>
+
+<div class="insight">
+核心思路：不用 <code>CreateRemoteThread</code>（会被反外挂检测），而是<strong>直接操作目标进程主线程的 EIP/RIP 寄存器</strong>，让 shellcode 在主线程上下文中执行。
+</div>
+
+<details>
+<summary>x86 注入流程（injectdll_x86）</summary>
+<div class="inner">
+
+<pre><code class="language-plaintext">1. SuspendThread(hThread)
+2. VirtualAllocEx → 为 shellcode 分配可执行内存
+3. VirtualAllocEx → 为 DLL 路径字符串分配内存
+4. 将 LoadLibraryW 地址 + DLL路径指针 + 原始EIP 写入 shellcode
+5. SetThreadContext → EIP = shellcode 地址
+6. ResumeThread(hThread)</code></pre>
+
+<p><strong>Shellcode 执行流程（39 字节）：</strong></p>
+
+<pre><code class="language-x86asm">push EIP_original        ; 保存返回地址
+pushfd                   ; 保存标志寄存器
+pushad                   ; 保存通用寄存器
+push [ptrDllPath]        ; DLL 路径指针入栈
+call [LoadLibraryW]      ; 加载 LuaEngine.dll
+popad                    ; 恢复通用寄存器
+popfd                    ; 恢复标志寄存器
+ret                      ; 跳回原始 EIP，继续 war3.exe 正常启动</code></pre>
+
+</div>
+</details>
+
+<details>
+<summary>x64 注入流程（injectdll_x64）</summary>
+<div class="inner">
+
+<ul>
+  <li>通过 <code>wow64ext.h</code> 从 32 位进程操作 64 位进程</li>
+  <li>使用 <code>LdrLoadDll</code>（从 <code>ntdll.dll</code>）替代 <code>LoadLibraryW</code></li>
+  <li>Shellcode 保存/恢复完整 x64 寄存器上下文（push/pop r* 系列）</li>
+</ul>
+
+</div>
+</details>
+
+<p><strong>DLL 选择逻辑：</strong></p>
+
+<pre><code class="language-cpp">bool injectdll(PROCESS_INFORMATION& pi, wstring x86dll, wstring x64dll) {
+    if (is_process64(pi.hProcess))
+        return injectdll_x64(pi, x64dll);  // 64位war3 → 64位LuaEngine
+    else
+        return injectdll_x86(pi, x86dll);  // 32位war3 → 32位LuaEngine
+}</code></pre>
+
+<div class="file-path">Development/Core/ydbase/base/hook/injectdll.cpp</div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<section id="phase2">
+<h2>三、第二阶段：LuaEngine.dll 启动与 Lua 引导系统</h2>
+
+<h3>3.1 LuaEngine.dll 入口</h3>
+
+<p>当 shellcode 中 <code>LoadLibrary("LuaEngine.dll")</code> 执行时，<code>DllMain</code> 被调用：</p>
+
+<pre><code class="language-cpp">// DllMain.cpp
+BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
+    if (reason == DLL_PROCESS_ATTACH) {
+        std::wstring name = getenv(L"ydwe-process-name"); // "war3"
+        lua_State* L = LuaEngineCreate(name.c_str());
+        if (L) {
+            LuaEngineStart(L);  // require "main"
+        }
+    }
+}</code></pre>
+
+<div class="card">
+<h4>LuaEngineCreate 关键步骤</h4>
+<ol>
+  <li>Hook <code>lua_pcallk</code> → <code>FakeLuaPcall</code>：用 <code>__try/__except</code> 包裹所有 Lua 调用，防止崩溃传播到 war3 进程</li>
+  <li><code>luaL_newstate()</code> 创建 Lua 5.4 状态机</li>
+  <li>打开所有标准库（table, string, math, coroutine 等）</li>
+  <li>设置 <code>package.path → script/common/?.lua;script/war3/?.lua</code></li>
+  <li>设置 <code>package.cpath → ydwe/bin/?.dll</code></li>
+</ol>
+</div>
+
+<pre><code class="language-cpp">void LuaEngineStart(lua_State* L) {
+    lua_pushcfunction(L, error_handler);
+    lua_getglobal(L, "require");
+    lua_pushstring(L, "main");
+    lua_pcall(L, 1, 0, -3);  // require "main" → 加载 script/war3/main.lua
+}</code></pre>
+
+<div class="file-path">Development/Core/LuaEngine/DllMain.cpp</div>
+<div class="file-path">Development/Core/LuaEngine/LuaEngine.cpp</div>
+
+<h3>3.2 Lua 引导脚本：war3/main.lua</h3>
+
+<p><code>script/war3/main.lua</code> 是整个插件系统的<strong>编排器</strong>，三个步骤：</p>
+
+<div class="card">
+  <h4>Step A — IAT Hook LoadLibraryA</h4>
+  <p>拦截 <code>kernel32!LoadLibraryA</code>，当检测到正在加载 <code>Game.dll</code> 时：</p>
+  <ul>
+    <li>可选加载补丁版 Game.dll</li>
+    <li>打开 <code>patch.mpq</code></li>
+    <li>发布事件 <code>'GameDll加载'</code>（携带 Game.dll 模块句柄）</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h4>Step B — 扫描加载插件 DLL</h4>
+  <p>响应 <code>'GameDll加载'</code> 事件，三个并行处理器：</p>
+  <ol>
+    <li>Hook <code>Game.dll</code> 的 <code>CreateWindowExA</code> → 检测魔兽窗口创建</li>
+    <li>加载 <code>yd_loader.dll</code>（IAT Hook 加载器），挂载战争补丁</li>
+    <li><strong>扫描 <code>plugin/warcraft3/</code> 目录，逐个加载所有 <code>.dll</code>，并调用其 <code>Initialize()</code> 导出函数</strong></li>
+  </ol>
+</div>
+
+<div class="card">
+  <h4>Step C — 事件驱动初始化</h4>
+  <p>后续各插件（yd_lua_engine、yd_jass_api 等）在各自的 <code>Initialize()</code> 中向引导系统注册回调，挂载到 <code>'GameDll加载'</code>、<code>'窗口初始化'</code>、<code>'游戏重置'</code> 等事件上，形成完整的<strong>事件驱动架构</strong>。每个插件只关心自己的初始化时机，无需感知其他插件的存在。</p>
+</div>
+
+<div class="file-path">Development/Component/script/war3/main.lua</div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<section id="phase3">
+<h2>四、第三阶段：JASS-Lua 桥接（yd_lua_engine.dll）</h2>
+
+<h3>4.1 yd_lua_engine.dll 初始化</h3>
+
+<p>由 <code>war3/main.lua</code> 通过 <code>LoadLibraryW</code> + <code>GetProcAddress("Initialize")</code> 加载。核心初始化逻辑通过 <strong>虚拟 MPQ 监视器</strong> 检测地图加载：</p>
+
+<pre><code class="language-cpp">void lua_loader::initialize() {
+    // 监视 war3map.j 的 MPQ 访问 —— 这是地图 JASS 脚本
+    virtual_mpq::force_watch("war3map.j", [&](...) {
+        if (地图未变化) return false;
+        initialize_lua();  // 初始化地图 Lua 环境
+        return false;
+    });
+
+    // 游戏重置时销毁 Lua 状态
+    event_game_reset([&]() {
+        lua_close(mainL);
+        mainL = nullptr;
+    });
+}</code></pre>
+
+<h3>4.2 地图类型检测 —— 双模式分支</h3>
+
+<pre><code class="language-cpp">void initialize_lua() {
+    if (地图MPQ中存在 "script\\war3map.lua") {
+        // ═══ 纯 Lua 模式 ═══
+        lua_State* L = getMainL();        // 创建地图 Lua 状态
+        luaL_openlibs(L);                 // 打开标准库
+        open_lua_engine(L);               // 注册 jass.* 模块
+        runtime::initialize();            // 运行时配置
+        luaL_loadbuffer(L, war3map.lua);  // 加载地图 Lua 脚本
+        safe_call(L, 0, 0, true);         // 执行
+    } else {
+        // ═══ JASS + Lua 混合模式 ═══
+        jass::table_hook("Cheat", &RealCheat, FakeCheat);
+        jass::japi_table_add(EXExecuteScript, "EXExecuteScript", "(S)S");
+    }
+}</code></pre>
+
+<div class="insight">
+地图包含 <code>war3map.lua</code> → 纯 Lua 模式，Lua 是主脚本语言；地图只有 <code>war3map.j</code> → 混合模式，通过 Cheat Hook 和 EXExecuteScript 在 JASS 和 Lua 之间架桥。
+</div>
+
+<h3>4.3 jass.* 模块注册表</h3>
+
+<p><code>open_lua_engine()</code> 以 preload 方式注册到 <code>package.preload</code>：</p>
+
+<table>
+<thead>
+<tr><th>模块</th><th>功能</th><th>源文件</th></tr>
+</thead>
+<tbody>
+<tr><td><code>jass.common</code></td><td>JASS 原生函数表（Blizzard.j + Common.j）</td><td><span class="file-path">libs_common.cpp</span></td></tr>
+<tr><td><code>jass.globals</code></td><td>读写 JASS 全局变量</td><td><span class="file-path">libs_globals.cpp</span></td></tr>
+<tr><td><code>jass.japi</code></td><td>从 Lua 注册新的 JASS 原生函数</td><td><span class="file-path">libs_japi.cpp</span></td></tr>
+<tr><td><code>jass.hook</code></td><td>从 Lua 端 Hook JASS 函数</td><td><span class="file-path">libs_hook.cpp</span></td></tr>
+<tr><td><code>jass.runtime</code></td><td>运行时配置（handle_level, sleep, crash_catch）</td><td><span class="file-path">libs_runtime.cpp</span></td></tr>
+<tr><td><code>jass.slk</code></td><td>SLK 表访问</td><td><span class="file-path">libs_slk.cpp</span></td></tr>
+<tr><td><code>jass.console</code></td><td>调试控制台</td><td><span class="file-path">libs_console.cpp</span></td></tr>
+<tr><td><code>jass.debug</code></td><td>调试器支持</td><td><span class="file-path">libs_debug.cpp</span></td></tr>
+<tr><td><code>jass.message</code></td><td>消息传递</td><td><span class="file-path">libs_message.cpp</span></td></tr>
+<tr><td><code>jass.bignum</code></td><td>大数运算 / 加密</td><td><span class="file-path">libs_bignum.cpp</span></td></tr>
+</tbody>
+</table>
+
+<h3>4.4 安全加固（沙箱）</h3>
+
+<details>
+<summary>fix_baselib.cpp 禁用的函数列表</summary>
+<div class="inner">
+
+<table>
+<thead><tr><th>函数</th><th>原因</th></tr></thead>
+<tbody>
+<tr><td><code>dofile</code>, <code>loadfile</code></td><td>禁止从文件系统加载代码</td></tr>
+<tr><td><code>os.execute</code>, <code>os.exit</code></td><td>禁止执行外部命令 / 退出进程</td></tr>
+<tr><td><code>os.getenv</code></td><td>禁止读取环境变量</td></tr>
+<tr><td><code>os.remove</code>, <code>os.rename</code></td><td>禁止操作文件系统</td></tr>
+<tr><td><code>io.popen</code>, <code>io.lines</code></td><td>禁止管道执行</td></tr>
+<tr><td><code>io.tmpfile</code></td><td>禁止临时文件</td></tr>
+<tr><td><code>io.input</code>, <code>io.output</code></td><td>禁止重定向标准 IO</td></tr>
+<tr><td><code>io.stdin/stdout/stderr</code></td><td>禁止直接访问标准流</td></tr>
+</tbody>
+</table>
+
+<p><strong>文件 IO 重定向：</strong></p>
+<ul>
+  <li>所有文件 IO 通过 <strong>Storm.dll</strong>（MPQ 接口）进行</li>
+  <li>写入限制在 Warcraft III 安装目录内</li>
+  <li>禁止写入 <code>.exe</code>, <code>.dll</code>, <code>.asi</code>, <code>.m3a</code> 等可执行文件类型</li>
+</ul>
+
+</div>
+</details>
+
+<div class="file-path">Development/Plugin/Warcraft3/yd_lua_engine/lua_engine/fix_baselib.cpp</div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<section id="phase4">
+<h2>五、第四阶段：双虚拟机运行时架构</h2>
+
+<h3>5.1 两个独立的 Lua 状态</h3>
+
+<table>
+<thead>
+<tr><th>状态机</th><th>创建者</th><th>用途</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>LuaEngine 状态</strong></td>
+  <td><code>LuaEngine.dll → DllMain</code></td>
+  <td>运行插件管理系统 — IAT Hook、DLL 加载、窗口管理、事件分发</td>
+</tr>
+<tr>
+  <td><strong>地图 Lua 状态</strong></td>
+  <td><code>yd_lua_engine.dll → getMainL()</code></td>
+  <td>运行地图脚本 — 游戏逻辑、JASS 互操作</td>
+</tr>
+</tbody>
+</table>
+
+<div class="insight">
+两个状态<strong>完全独立</strong>运行。LuaEngine 状态常驻（进程级），地图 Lua 状态懒加载（war3map.j 被访问时创建，重置时销毁）。
+</div>
+
+<h3>5.2 JASS VM 内部结构</h3>
+
+<pre><code class="language-cpp">struct jass_vm_t {
+    char        unk0[0x20];
+    opcode*     opcode;              // 0x0020 — 当前指令指针
+    // ...
+    uint32_t    has_sleep;           // 0x0034 — sleep 标记
+    // ...
+    variable_table*     global_table;  // 0x285C — 全局变量表
+    stackframe_t*       stackframe;    // 0x2868 — 调用栈
+    string_fasttable*   string_table;  // 0x2874 — 字符串表
+    code_table_t*       code_table;    // 0x2888 — 函数 / 代码表
+    handle_table_t**    handle_table;  // 0x28A4 — handle 引用表
+};</code></pre>
+
+<div class="file-path">Development/Core/ydwar3/warcraft3/hashtable.h</div>
+
+<p>这些偏移量通过 <strong>war3_searcher</strong>（二进制模式匹配）在运行时定位，支持多版本适配（1.27a/b 等）。</p>
+
+<!-- ─── 5.3 互操作机制 ─── -->
+
+<h3>5.3 核心互操作机制</h3>
+
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TB
+  subgraph "六种互操作路径"
+    A["Lua → JASS 调用<br/>jass.common.CJ.xxx()"]
+    B["Lua → JASS (Sleep感知)<br/>TriggerSleepAction"]
+    C["JASS → Lua 回调<br/>TriggerAddAction(lua_func)"]
+    D["JASS → Lua 表达式<br/>EXExecuteScript()"]
+    E["Chat → Lua 模块<br/>exec-lua:module"]
+    F["Lua Hook JASS<br/>hook.CreateUnit = ..."]
+  end
+  A -->|"jass_call_native_function<br/>→ jass::call()"| JVM["JASS VM"]
+  B -->|"coroutine yield<br/>+ opcode 回退"| JVM
+  C -->|"trampoline (9 opcodes)<br/>→ jass_callback"| LVM["Lua VM"]
+  D -->|"luaL_loadbuffer<br/>→ safe_call"| LVM
+  E -->|"FakeCheat<br/>→ require()"| LVM
+  F -->|"lua_to_nativefunction<br/>汇编存根"| JVM
+</div>
+</div>
+
+<!-- A) Lua → JASS -->
+<details open>
+<summary><strong>A) Lua 调用 JASS 原生函数</strong></summary>
+<div class="inner">
+
+<p>当 Lua 代码写 <code>local t = CJ.CreateTrigger()</code> 时：</p>
+
+<pre><code class="language-plaintext">1. jass.common 的 __index 元方法被触发 → jass_get(L)
+2. 在 JASS 函数表中查找 "CreateTrigger"
+3. 返回 C closure (upvalue = jass::func_value* 指针)
+4. 调用时进入 jass_call_closure(L)
+     └─ jass_call_native_function(L, nf, func_address)
+          ├─ 从 Lua 栈读取参数，通过 jassbind 转换为 JASS 类型
+          │    boolean → TYPE_BOOLEAN
+          │    number  → TYPE_INTEGER / TYPE_REAL
+          │    string  → TYPE_STRING (通过 jass::create_string)
+          │    userdata/lightuserdata → TYPE_HANDLE
+          │    function → TYPE_CODE (通过 trampoline 创建)
+          ├─ 构造 jass::call_param 参数列表
+          ├─ [可选] SEH 包裹：__try { jass::call(...) } __except { ... }
+          └─ 返回值通过 jass_push 转换回 Lua</code></pre>
+
+<div class="file-path">Development/Plugin/Warcraft3/yd_lua_engine/lua_engine/common.cpp</div>
+</div>
+</details>
+
+<!-- B) Sleep -->
+<details>
+<summary><strong>B) Sleep 感知的 Lua→JASS 调用</strong></summary>
+<div class="inner">
+
+<p><code>TriggerSleepAction</code>、<code>TriggerWaitForSound</code> 等函数会挂起 JASS 执行。特殊处理：</p>
+
+<pre><code class="language-cpp">int jass_call_closure(lua_State* L) {
+    int result = jass_call_native_function(L, ...);
+    if (lua_isyieldable(L)) {
+        jass_vm_t* thread = get_jass_thread();
+        if (thread && thread->has_sleep) {
+            // 回退 JASS 指令指针（跳过 trampoline 占用的 9 条 opcode）
+            thread->opcode -= jass::trampoline_size() / sizeof(jass::opcode);
+            return lua_yield(L, 0);  // Lua coroutine 让出执行权
+        }
+    }
+    return result;
+}</code></pre>
+
+<div class="mermaid-wrap">
+<div class="mermaid">
+sequenceDiagram
+  participant L as Lua Coroutine
+  participant J as JASS VM
+  L->>J: TriggerSleepAction(2.0)
+  J-->>J: 设置 has_sleep = true
+  Note over L: opcode -= 9 (回退trampoline)
+  L-->>J: lua_yield → 控制权归还 JASS
+  J->>J: 处理其他 opcode...
+  Note over J: 2 秒后 sleep 结束
+  J->>L: trampoline → lua_resume
+  L->>L: 从 yield 点继续执行
+</div>
+</div>
+
+</div>
+</details>
+
+<!-- C) Trampoline -->
+<details>
+<summary><strong>C) JASS 调用 Lua 函数（Trampoline 机制）</strong></summary>
+<div class="inner">
+
+<p>当 Lua 将函数作为 <code>code</code> 参数传给 JASS 时（如 <code>TriggerAddAction</code>），需要 JASS 可调用的入口。</p>
+
+<p><strong>Trampoline 创建：</strong></p>
+
+<pre><code class="language-plaintext">cfunction_to_code(L, index)
+  ├─ runtime::callback_push(L, index) → Lua 函数注册到回调表，获得 ref
+  ├─ jass::trampoline_create(jass_callback, lua_State*, ref)
+  │    ├─ 分配可执行内存
+  │    ├─ 生成 9 条 JASS opcode（跳板字节码）
+  │    └─ 返回 opcode 地址 → 这就是 JASS 中的 code 值
+  └─ 返回 code handle</code></pre>
+
+<p><strong>汇编存根（lua_to_nativefunction.h）：</strong></p>
+
+<pre><code class="language-x86asm">push esi              ; 保存 esi
+mov  esi, esp
+add  esi, 8           ; esi → 参数列表指针
+push esi              ; 压栈参数列表地址
+mov  ecx, this        ; 设置 C++ this 指针
+call lua_function     ; 调用 C++ → C++ 再调 Lua
+pop  esi              ; 恢复 esi
+ret</code></pre>
+
+<p>这个存根符合 JASS 调用约定（<code>__stdcall</code>-like，参数指针在 ESI），可以直接放在 JASS 原生函数表中。</p>
+
+</div>
+</details>
+
+<!-- D) EXExecuteScript -->
+<details>
+<summary><strong>D) JASS 调用 Lua 表达式（EXExecuteScript）</strong></summary>
+<div class="inner">
+
+<pre><code class="language-cpp">jstring_t EXExecuteScript(jstring_t script) {
+    lua_State* L = getMainL();
+    std::string str = fmt::format("return ({})", from_string(script));
+    luaL_loadbuffer(L, str.c_str(), str.size(), ...);
+    safe_call(L, 0, 1, true);
+    jstring_t result = 0;
+    if (lua_isstring(L, -1))
+        result = jass::create_string(lua_tostring(L, -1));
+    lua_pop(L, 1);
+    return result;
+}</code></pre>
+
+<p>JASS 侧用法：</p>
+<pre><code class="language-jass">local string result = EXExecuteScript("my_lua_function(42)")</code></pre>
+
+</div>
+</details>
+
+<!-- E) Cheat -->
+<details>
+<summary><strong>E) Chat 命令执行 Lua（exec-lua:）</strong></summary>
+<div class="inner">
+
+<p><code>FakeCheat</code> Hook 了 JASS 的 <code>Cheat</code> 原生函数。当玩家输入 <code>exec-lua:"module_name"</code>：</p>
+
+<pre><code class="language-plaintext">输入：exec-lua:"mylib"
+  → FakeCheat 截获
+  → require "mylib"
+  → 执行对应 Lua 模块</code></pre>
+
+</div>
+</details>
+
+<!-- F) Hook -->
+<details>
+<summary><strong>F) Lua Hook JASS 函数</strong></summary>
+<div class="inner">
+
+<pre><code class="language-lua">local hook = require "jass.hook"
+hook["CreateUnit"] = function(jass_func, id, x, y, face)
+    print("CreateUnit called:", id, x, y)
+    return jass_func(id, x, y, face)  -- 调用原函数
+end</code></pre>
+
+<p>底层：<code>jass::hook()</code> 修改 JASS 原生函数表，将地址替换为动态生成的 <code>lua_to_nativefunction</code> 汇编存根。</p>
+
+</div>
+</details>
+
+<!-- ─── 5.4 并发模型 ─── -->
+<h3>5.4 并发执行模型</h3>
+
+<div class="insight">
+双虚拟机的"并行"实际上是<strong>协作式并发</strong>（cooperative concurrency），而非真正的多线程并行。控制权通过 trampoline 进入 Lua，通过 yield 归还 JASS。
+</div>
+
+<div class="mermaid-wrap">
+<div class="mermaid">
+sequenceDiagram
+  participant W3 as war3 主循环
+  participant J as JASS VM
+  participant T as Trampoline
+  participant L as Lua VM
+
+  W3->>J: 处理游戏事件
+  J->>J: 执行 JASS opcodes...
+  J->>T: 遇到 Lua trampoline (9 opcodes)
+  T->>L: 进入 Lua 执行
+
+  rect rgb(250, 247, 242)
+    Note over L: Lua 脚本执行中
+    L->>J: jass.common → jass::call() (同步调用)
+    J-->>L: 返回值
+    L->>J: TriggerSleepAction(2.0)
+    J-->>L: has_sleep = true
+    Note over L: opcode -= 9 (回退)
+    L-->>T: lua_yield → 控制权归还
+  end
+
+  J->>J: 继续执行 JASS opcodes...
+  Note over J: 2 秒后 sleep 结束
+  J->>T: 重新进入 trampoline
+  T->>L: lua_resume (恢复协程)
+  L->>L: 从 yield 点继续执行
+  L-->>J: 脚本结束，返回
+  J->>W3: 下一帧
+</div>
+</div>
+
+<h3>5.5 Handle 管理</h3>
+
+<table>
+<thead>
+<tr><th>级别</th><th>实现</th><th>安全性</th><th>性能</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Level 0</strong></td><td>普通整数</td><td>无保护，handle 可能失效</td><td>最快</td></tr>
+<tr><td><strong>Level 1</strong></td><td>lightuserdata</td><td>只做相等比较</td><td>快</td></tr>
+<tr><td><strong>Level 2（默认）</strong></td><td>全 userdata + <code>__gc</code></td><td>引用计数，GC 时自动释放 JASS handle</td><td>有开销</td></tr>
+</tbody>
+</table>
+
+<div class="file-path">Development/Plugin/Warcraft3/yd_lua_engine/lua_engine/class_handle.cpp</div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<section id="sequence">
+<h2>六、完整流程时序图</h2>
+
+<div class="mermaid-wrap">
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant YDW as YDWE.exe
+  participant SUS as YDWEStartup.dll
+  participant W3 as war3.exe (挂起)
+  participant LE as LuaEngine.dll
+  participant ML as war3/main.lua
+  participant GD as Game.dll
+  participant YLE as yd_lua_engine.dll
+  participant JVM as JASS VM
+  participant LVM as Lua VM (地图)
+
+  YDW->>SUS: 加载 YDWEStartup.dll
+  SUS->>W3: CreateProcess(SUSPENDED)
+  Note over W3: 主线程挂起
+  SUS->>W3: injectdll(LuaEngine.dll)
+  Note over W3: VirtualAllocEx shellcode + DLL路径
+  SUS->>W3: ResumeThread
+
+  activate W3
+  W3->>LE: shellcode → LoadLibraryW
+  LE->>LE: DllMain → LuaEngineCreate
+  Note over LE: Hook lua_pcallk (SEH)<br/>创建 Lua 5.4 状态
+  LE->>ML: require "main"
+  ML->>ML: IAT Hook LoadLibraryA
+  deactivate W3
+
+  W3->>GD: LoadLibrary("Game.dll")
+  GD->>ML: [IAT Hook 截获]
+  ML->>ML: 触发 'GameDll加载' 事件
+  ML->>YLE: LoadLibrary + Initialize()
+  YLE->>YLE: virtual_mpq::watch("war3map.j")
+
+  Note over W3: war3 正常启动...<br/>玩家选择地图...
+
+  W3->>JVM: 加载地图 → 访问 war3map.j
+  JVM->>YLE: [virtual_mpq 监视器触发]
+  YLE->>LVM: getMainL() → 创建地图 Lua 状态
+  YLE->>LVM: open_lua_engine(L) → 注册 jass.*
+  YLE->>LVM: load + run war3map.lua
+
+  rect rgb(250, 247, 242)
+    Note over JVM,LVM: ═══ 双虚拟机并行运行 ═══
+    JVM->>JVM: 主循环处理 opcode
+    JVM->>LVM: trampoline → 进入 Lua
+    LVM->>JVM: jass.common → jass::call() (同步)
+    LVM->>JVM: sleep → lua_yield
+    JVM->>LVM: sleep 结束 → lua_resume
+  end
+</div>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<section id="summary">
+<h2>七、关键技术点总结</h2>
+
+<table>
+<thead>
+<tr><th>技术点</th><th>实现方式</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>进程注入</strong></td><td>代码洞注入（Code Cave），修改 EIP/RIP 在主线程上下文执行 shellcode，不用 CreateRemoteThread</td></tr>
+<tr><td><strong>Hook 加载时机</strong></td><td>IAT Hook <code>kernel32!LoadLibraryA</code>，在 Game.dll 加载时注入所有插件</td></tr>
+<tr><td><strong>双 Lua 状态</strong></td><td>LuaEngine 状态（插件系统）+ 地图 Lua 状态（游戏逻辑），独立生命周期</td></tr>
+<tr><td><strong>JASS→Lua</strong></td><td>Trampoline（9 条 JASS opcode）+ <code>jass_callback</code> + <code>safe_call_ref</code></td></tr>
+<tr><td><strong>Lua→JASS</strong></td><td>C closure + <code>jass_call_native_function</code> + <code>jass::call()</code> 直接调用原生函数地址</td></tr>
+<tr><td><strong>Sleep 处理</strong></td><td>Lua coroutine yield + JASS opcode 指针回退（-9）+ trampoline 恢复</td></tr>
+<tr><td><strong>类型转换</strong></td><td><code>jassbind</code> 模块统一处理 6 种 JASS 类型</td></tr>
+<tr><td><strong>Handle 管理</strong></td><td>三级可选：整数 / lightuserdata / userdata，默认 userdata + <code>__gc</code> 自动释放</td></tr>
+<tr><td><strong>安全加固</strong></td><td>SEH 包裹 pcall、沙箱标准库、MPQ 重定向 IO、黑名单禁止写入可执行文件</td></tr>
+<tr><td><strong>版本适配</strong></td><td><code>war3_searcher</code> 二进制模式匹配定位 JASS VM 结构偏移</td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<section id="index">
+<h2>八、核心源文件索引</h2>
+
+<details>
+<summary><strong>注入与启动</strong>（2 个文件）</summary>
+<div class="inner">
+<p><span class="file-path">Development/Core/YDWEStartup/LaunchWarcraft3.cpp</span> — 创建 war3.exe 进程 + 注入 LuaEngine.dll</p>
+<p><span class="file-path">Development/Core/ydbase/base/hook/injectdll.cpp</span> — 代码洞注入实现（x86/x64）</p>
+</div>
+</details>
+
+<details>
+<summary><strong>核心 Lua 运行时</strong>（2 个文件）</summary>
+<div class="inner">
+<p><span class="file-path">Development/Core/LuaEngine/DllMain.cpp</span> — LuaEngine.dll 入口</p>
+<p><span class="file-path">Development/Core/LuaEngine/LuaEngine.cpp</span> — 创建 Lua 状态、SEH pcall 包装</p>
+</div>
+</details>
+
+<details>
+<summary><strong>JASS-Lua 桥接</strong>（12 个文件）</summary>
+<div class="inner">
+<p><span class="file-path">.../yd_lua_engine/lua_engine/lua_loader.cpp</span> — 桥接入口：地图检测、双模式选择</p>
+<p><span class="file-path">.../yd_lua_engine/lua_engine/common.cpp</span> — Lua→JASS 调用实现</p>
+<p><span class="file-path">.../yd_lua_engine/lua_engine/callback.cpp</span> — JASS→Lua 回调、trampoline 创建</p>
+<p><span class="file-path">.../yd_lua_engine/lua_engine/lua_to_nativefunction.h</span> — 动态汇编存根生成</p>
+<p><span class="file-path">.../yd_lua_engine/lua_engine/open_lua_engine.cpp</span> — jass.* 模块注册</p>
+<p><span class="file-path">.../yd_lua_engine/lua_engine/libs_common.cpp</span> — jass.common 函数分派</p>
+<p><span class="file-path">.../yd_lua_engine/lua_engine/libs_hook.cpp</span> — jass.hook 实现</p>
+<p><span class="file-path">.../yd_lua_engine/lua_engine/libs_japi.cpp</span> — jass.japi 实现</p>
+<p><span class="file-path">.../yd_lua_engine/lua_engine/libs_runtime.cpp</span> — 运行时配置</p>
+<p><span class="file-path">.../yd_lua_engine/lua_engine/fix_baselib.cpp</span> — 安全加固 + RNG 同步</p>
+<p><span class="file-path">.../yd_lua_engine/lua_engine/jassbind.cpp</span> — JASS↔Lua 类型转换</p>
+<p><span class="file-path">.../yd_lua_engine/lua_engine/class_handle.cpp</span> — Handle 管理</p>
+</div>
+</details>
+
+<details>
+<summary><strong>JASS VM 底层</strong>（4 个文件）</summary>
+<div class="inner">
+<p><span class="file-path">Development/Core/ydwar3/warcraft3/hashtable.h</span> — JASS VM 结构体定义</p>
+<p><span class="file-path">Development/Core/ydwar3/warcraft3/jass.h</span> — JASS 类型、调用约定</p>
+<p><span class="file-path">Development/Core/ydwar3/warcraft3/jass/trampoline_function.h</span> — Trampoline 创建</p>
+<p><span class="file-path">Development/Core/ydwar3/warcraft3/jass/hook.h</span> — JASS Hook API</p>
+</div>
+</details>
+
+<details>
+<summary><strong>Lua 引导脚本 & 插件加载器</strong>（3 个文件）</summary>
+<div class="inner">
+<p><span class="file-path">Development/Component/script/war3/main.lua</span> — 主引导脚本（IAT Hook + 插件加载）</p>
+<p><span class="file-path">Development/Plugin/Warcraft3/yd_loader/DllMain.cpp</span> — yd_loader 入口</p>
+<p><span class="file-path">Development/Plugin/Warcraft3/yd_loader/DllModule.cpp</span> — IAT Hook 实现</p>
+</div>
+</details>
+</section>
+
+<footer>
+  <span>Generated from reading 21 source files across the YDWE codebase</span>
+  <span>2026-05-16</span>
+  <span>Repository: <code>C:\Users\leoric\Desktop\code\YDWE</code></span>
+</footer>
+
+</main>
+
+<script>
+// Initialize
+mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose' });
+hljs.highlightAll();
+
+// Active sidebar link
+const navLinks = document.querySelectorAll('#sidebar nav a');
+const sections = [...navLinks].map(a => document.querySelector(a.getAttribute('href')));
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const link = document.querySelector(`#sidebar nav a[href="#${e.target.id}"]`);
+      if (link) link.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.filter(Boolean).forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

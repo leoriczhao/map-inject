@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>构建与测试 · japi.dll</title>
+<style>
+  :root {
+    --bg:#0d1117; --card-bg:#161b22; --border:#30363d; --text:#c9d1d9;
+    --text-dim:#8b949e; --accent:#58a6ff; --green:#3fb950; --orange:#d2991d;
+    --red:#f85149; --code-bg:#0d1117;
+  }
+  * { margin:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .nav { background:var(--card-bg); border-bottom:1px solid var(--border); padding:12px 24px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .nav a { color:var(--accent); text-decoration:none; font-size:0.9em; }
+  .nav a:hover { text-decoration:underline; }
+  .nav .cur { color:var(--text); font-weight:600; }
+  .container { max-width:1000px; margin:0 auto; padding:24px 20px; }
+  h1 { font-size:1.8em; margin-bottom:8px; }
+  h2 { font-size:1.35em; margin:36px 0 14px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+  h3 { font-size:1.1em; margin:22px 0 10px; color:var(--accent); }
+
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:14px 18px; overflow-x:auto; font:12.5px/1.5 "Cascadia Code","Consolas",monospace; margin:12px 0; }
+  code { font:12.5px/1.4 "Cascadia Code","Consolas",monospace; background:rgba(255,255,255,0.06); padding:1px 5px; border-radius:3px; }
+  pre code { background:none; padding:0; }
+
+  table { width:100%; border-collapse:collapse; margin:14px 0; font-size:0.92em; }
+  th { background:var(--card-bg); padding:9px 12px; text-align:left; border:1px solid var(--border); color:var(--accent); }
+  td { padding:7px 12px; border:1px solid var(--border); }
+  tr:nth-child(even) td { background:rgba(255,255,255,0.015); }
+
+  .test-pass { color:var(--green); font-weight:600; }
+  .test-fail { color:var(--red); font-weight:600; }
+  .step { display:flex; gap:12px; align-items:flex-start; margin:8px 0; padding:10px 14px; background:var(--card-bg); border-radius:6px; border:1px solid var(--border); }
+  .step-num { background:var(--accent); color:#fff; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.8em; flex-shrink:0; }
+  .step-content { font-size:0.95em; }
+
+  @media (max-width:700px) { .container { padding:16px 12px; } }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="index.html">← 首页</a>
+  <a href="architecture.html">架构总览</a>
+  <a href="modules.html">Lua 模块</a>
+  <a href="internals.html">VM 内部</a>
+  <span class="cur">构建与测试</span>
+  <a href="source-index.html">源码索引</a>
+  <a href="tooling.html">工具链</a>
+</div>
+
+<div class="container">
+
+<h1>🔨 构建与测试</h1>
+
+<h2>1. 构建流程总览</h2>
+
+<div class="step"><div class="step-num">1</div><div class="step-content"><strong>编译 japi.dll</strong> — <code>src\build.bat</code> 调用 vcvars32.bat，用 CMake + Visual Studio 2022 Win32 生成 Release 配置 → 产出 <code>src\build\Release\japi.dll</code>（484 KB）</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-content"><strong>解包模板地图</strong> — <code>build.ps1</code> 使用 w3x2lni 将 <code>reference\builtin-japi\original.w3x</code> 解包到 <code>build\</code> 目录</div></div>
+<div class="step"><div class="step-num">3</div><div class="step-content"><strong>注入自定义文件</strong> — 删除原始 <code>wenhao_plugin.tga</code>，复制 <code>japi.dll→japi.tga</code>、<code>tools\callback</code>、<code>tools\war3map.lua</code>，可选复制 <code>UjAPI.dll</code></div></div>
+<div class="step"><div class="step-num">4</div><div class="step-content"><strong>重新打包</strong> — w3x2lni pack → <code>demo.w3x</code></div></div>
+<div class="step"><div class="step-num">5</div><div class="step-content"><strong>自动部署</strong> — 复制 <code>demo.w3x</code> 到 <code>War3\Maps\Test\</code></div></div>
+
+<h2>2. CMake 构建配置</h2>
+
+<h3>CMakeLists.txt（91 行）</h3>
+<table>
+<tr><th>设置</th><th>值</th><th>说明</th></tr>
+<tr><td>C 标准</td><td>C11</td><td>Lua 5.3 源码为 C89/C99 兼容</td></tr>
+<tr><td>C++ 标准</td><td>C++17</td><td>使用 constexpr、static_assert、auto 等</td></tr>
+<tr><td>CRT 链接</td><td><code>/MT</code>（静态多线程）</td><td>零 vcruntime 依赖，单 DLL 自包含</td></tr>
+<tr><td>生成器</td><td>Visual Studio 17 2022, Win32</td><td>x86 32-bit，匹配 War3 进程架构</td></tr>
+<tr><td>链接选项</td><td><code>/SAFESEH:NO /MANIFEST:NO</code></td><td>禁用安全异常处理（naked 函数需要），禁用 manifest</td></tr>
+</table>
+
+<h3>目标定义</h3>
+<pre><code># 1. Lua 静态库（lualib.lib）
+add_library(lualib STATIC ${LUA_LIB_SRC})
+# lapi.c, lauxlib.c, lbaselib.c, lbitlib.c, ... (32 个 .c 文件)
+
+# 2. japi.dll
+add_library(japi SHARED ${JAPI_SRC})
+# 链接 lualib → Lua 静态链接进 DLL
+target_link_libraries(japi PRIVATE lualib)
+
+# 3. lua.exe（独立解释器，用于构建脚本）
+add_executable(lua ${LUA_SRC_DIR}/lua.c)
+target_link_libraries(lua PRIVATE lualib)</code></pre>
+
+<h3>源文件列表</h3>
+<table>
+<tr><th>文件</th><th>行数</th><th>职责</th></tr>
+<tr><td><code>dllmain.cpp</code></td><td>29</td><td>DLL 入口 + call() 导出</td></tr>
+<tr><td><code>jass_vm.cpp</code></td><td>333</td><td>PE 扫描 + native 发现 + VM context + create_string</td></tr>
+<tr><td><code>jass_call.cpp</code></td><td>42</td><td>JASS native 调用 trampoline</td></tr>
+<tr><td><code>native_registry.cpp</code></td><td>174</td><td>nfunction_add 定位 + 自定义 native 注册</td></tr>
+<tr><td><code>lua_bootstrap.cpp</code></td><td>345</td><td>Lua 引擎 + jass 模块 + MPQ 读取 + war3map.lua 执行</td></tr>
+<tr><td><code>lua_runtime.cpp</code></td><td>155</td><td>jass.runtime 模块</td></tr>
+<tr><td><code>lua_japi.cpp</code></td><td>478</td><td>jass.japi 模块（thunk 生成 + 分发）</td></tr>
+<tr><td><code>lua_message.cpp</code></td><td>857</td><td>jass.message 模块（CGameUI hook + 输入系统）</td></tr>
+<tr><td><code>lua_slk.cpp</code></td><td>289</td><td>jass.slk 模块（SLK 解析器）</td></tr>
+<tr><td><code>lua_hook.cpp</code></td><td>366</td><td>jass.hook 模块（native 拦截）</td></tr>
+<tr><td><code>util/memory_protect.cpp</code></td><td>22</td><td>VirtualProtect RAII 包装</td></tr>
+<tr><td><code>util/replace_pointer.cpp</code></td><td>19</td><td>原子指针替换</td></tr>
+</table>
+
+<h2>3. 测试套件：war3map.lua</h2>
+
+<p>357 行 Lua 测试脚本（<code>tools/war3map.lua</code>），在 <strong>游戏内真实环境</strong> 中运行。当前 <strong>27/27 全部通过</strong>。</p>
+
+<table>
+<tr><th>模块</th><th>测试数</th><th>测试内容</th></tr>
+<tr><td><strong>jass.common</strong></td><td>4</td><td>模块加载、GetLocalPlayer 返回 handle、call vs metatable 一致性、DisplayTimedTextToPlayer 实际调用</td></tr>
+<tr><td><strong>jass.runtime</strong></td><td>3</td><td>模块加载（验证所有默认值）、error_handle get/set、sleep/console 属性读写</td></tr>
+<tr><td><strong>jass.message</strong></td><td>9</td><td>模块加载、mouse() 世界坐标、selection() 选中单位、button() 技能栏、keyboard 表 + 整数键访问、hook set/clear、hook 回调接收、order 函数存在性 + 无选中优雅处理、order_enable_debug 开关</td></tr>
+<tr><td><strong>jass.japi</strong></td><td>2</td><td>注册并调用 native（TestJapiAdd: 10+32=42）、pairs 遍历已注册 native</td></tr>
+<tr><td><strong>jass.hook</strong></td><td>2</td><td>模块加载、hook/unhook 拦截 TestJapiAdd 并将结果乘以 2</td></tr>
+<tr><td><strong>jass.slk</strong></td><td>2</td><td>模块加载、懒加载 AbilityData 并验证 AHbz.code=="AHbz"</td></tr>
+<tr><td><strong>message.orders</strong></td><td>3</td><td>order 函数存在性、无选中时优雅处理、order_enable_debug 开关</td></tr>
+<tr><td><strong>jass.sleep</strong></td><td>3</td><td>模块加载 + 全局 sleep() 注册、非协程调用报 error、runtime.sleep 开关</td></tr>
+</table>
+
+<h3>测试框架</h3>
+<pre><code>local pass, fail = 0, 0
+local function test(name, fn)
+    local ok, err = pcall(fn)
+    if ok then
+        pass = pass + 1
+        print("[PASS] " .. name)
+    else
+        fail = fail + 1
+        print("[FAIL] " .. name .. " : " .. tostring(err))
+    end
+end
+
+-- ... 27 项测试 ...
+
+print(string.format(" Results: %d passed, %d failed", pass, fail))
+if fail > 0 then print("SOME TESTS FAILED!")
+else print("ALL TESTS PASSED") end</code></pre>
+
+<h2>4. 视觉演示</h2>
+<p><code>war3map.lua</code> 除了测试套件，还包含一个 <code>visual_demo()</code> 函数（L202-316），在游戏内展示：</p>
+<ol>
+<li>创建 4 个单位（footman, rifleman, knight, priest）在起始位置</li>
+<li>设置镜头位置</li>
+<li>选中第一个单位</li>
+<li>加载 SLK 单位数据并显示单位名和 HP</li>
+<li>安装键盘 hook（ESC 清除，20 次按键后自动清除）</li>
+</ol>
+
+<h2>5. 调试输出</h2>
+
+<p>三重输出机制（<code>dbg_printf</code>, lua_bootstrap.cpp:27）：</p>
+<ol>
+<li><strong>DebugView</strong> — <code>OutputDebugStringA</code>，使用 <code>tools\Dbgview.exe</code> 实时查看</li>
+<li><strong>控制台</strong> — <code>AllocConsole</code> + <code>WriteConsoleA</code>，游戏运行时可见独立控制台窗口</li>
+<li><strong>日志文件</strong> — <code>japi-debug.log</code>，带时间戳的持久化日志</li>
+</ol>
+
+<pre><code>void dbg_printf(const char* fmt, ...) {
+    char buf[1024];
+    int n = vsnprintf(buf, sizeof(buf), fmt, va);
+    OutputDebugStringA(buf);              // → DebugView
+    WriteConsoleA(stdout, buf, n, ...);   // → 控制台
+    if (g_log) { fwrite(buf, 1, n, g_log); fflush(g_log); }  // → 日志文件
+}</code></pre>
+
+<h2>6. 完整构建命令</h2>
+
+<pre><code># 编译
+cd src
+.\build.bat
+# → src/build/Release/japi.dll (484 KB)
+
+# 打包 + 部署 + 运行
+cd ..
+.\build.ps1
+& "D:\Warcraft III Frozen Throne 1.27a publish\war3.exe" -loadfile "Maps\Test\demo.w3x"
+
+# 查看日志
+notepad "D:\Warcraft III Frozen Throne 1.27a publish\japi-debug.log"</code></pre>
+
+<h2>7. 依赖项</h2>
+
+<table>
+<tr><th>组件</th><th>来源</th><th>说明</th></tr>
+<tr><td>Visual Studio 2022 Build Tools</td><td><code>D:\vs2022\BuildTools</code></td><td>MSVC 编译器 + Windows SDK</td></tr>
+<tr><td>CMake 3.20+</td><td>系统 PATH</td><td>跨平台构建系统</td></tr>
+<tr><td>Lua 5.3.6</td><td><code>src/vendor/lua-5.3.6-src/</code></td><td>静态链接，无外部 Lua DLL 依赖</td></tr>
+<tr><td>w3x2lni</td><td><code>tools/w3x2lni/</code></td><td>第三方 MPQ 地图打包/解包工具</td></tr>
+<tr><td>DebugView</td><td><code>tools/Dbgview.exe</code></td><td>Sysinternals 调试输出查看器</td></tr>
+<tr><td>pjass</td><td><code>tools/pjass.exe</code></td><td>JASS 语法检查器（用于验证 callback 代码）</td></tr>
+</table>
+
+</div>
+</body>
+</html>
