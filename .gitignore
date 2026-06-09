@@ -20,6 +20,10 @@ src/build10/
 Thumbs.db
 Desktop.ini
 
+# Binary map files (use LNI text format instead)
+*.w3x
+*.w3m
+
 # Reference: ignored subdirs (submodules or not needed)
 reference/ujapi/
 reference/old-japi/
