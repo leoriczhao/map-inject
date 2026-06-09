@@ -8,6 +8,7 @@
 #   .\tools\deploy.ps1 -NoKill                          # leave War3 running after tests
 param(
     [string]$DllPath = "",
+    [string]$BaseMap = "",
     [string]$LogFile = "",
     [int]$Timeout    = 120,
     [switch]$NoKill
@@ -36,6 +37,7 @@ if (-not (Test-Path $War3Exe)) { throw "War3 not found: $War3Exe" }
 Write-Host "[1/4] Packing map..."
 $packArgs = @{}
 if ($DllPath) { $packArgs["DllPath"] = $DllPath }
+if ($BaseMap) { $packArgs["BaseMap"] = $BaseMap }
 $packResult = & $PackScript @packArgs 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host $packResult

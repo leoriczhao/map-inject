@@ -20,7 +20,7 @@ $Script  = "$W3x2Lni\script"
 
 # Defaults
 if (-not $DllPath)  { $DllPath  = "$Root\src\build\bin\Release\yd_japi.dll" }
-if (-not $BaseMap)  { $BaseMap  = "$Root\lalala.w3m" }
+if (-not $BaseMap)  { throw "BaseMap is required. Provide a base .w3m/.w3x map via -BaseMap parameter." }
 if (-not $OutFile)  { $OutFile  = "$Root\build\output.w3x" }
 if (-not $MapDir)   { $MapDir   = "$Root\map" }
 $CbSrc   = "$Root\tools\callback"

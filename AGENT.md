@@ -31,25 +31,25 @@
 **脚本**：
 
 ```powershell
-# 打包地图（使用默认路径）
-.\tools\pack.ps1
+# 打包地图（需要提供基座地图）
+.\tools\pack.ps1 -BaseMap "path\to\base.w3m"
 
 # 打包地图（指定 DLL 路径）
-.\tools\pack.ps1 -DllPath "path\to\yd_japi.dll"
+.\tools\pack.ps1 -BaseMap "path\to\base.w3m" -DllPath "path\to\yd_japi.dll"
 
 # 打包 + 部署 + 启动 War3 + 等待测试结果
-.\tools\deploy.ps1
+.\tools\deploy.ps1 -BaseMap "path\to\base.w3m"
 
 # 打包 + 部署 + 保持 War3 运行
-.\tools\deploy.ps1 -NoKill
+.\tools\deploy.ps1 -BaseMap "path\to\base.w3m" -NoKill
 ```
 
 **pack.ps1 参数**：
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
+| `-BaseMap` | 必填 | 基座地图（.w3m/.w3x） |
 | `-DllPath` | `src\build\bin\Release\yd_japi.dll` | DLL 路径 |
-| `-BaseMap` | `lalala.w3m` | 基座地图 |
 | `-OutFile` | `build\output.w3x` | 输出路径 |
 | `-MapDir` | `map` | Lua 源码目录 |
 
