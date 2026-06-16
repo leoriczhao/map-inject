@@ -3,6 +3,12 @@ build/
 src/build/
 src/build10/
 
+# Local config (user-specific paths)
+tools/config.local.ps1
+
+# Logs
+*.log
+
 # DLL output
 *.dll
 *.tga

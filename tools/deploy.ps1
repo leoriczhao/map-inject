@@ -56,7 +56,7 @@ Write-Host "  Deployed to $destMap"
 # ── Step 3: Launch War3 ────────────────────────────────────────
 Write-Host "[3/4] Launching War3..."
 Remove-Item $LogFile -Force -ErrorAction SilentlyContinue
-$war3 = Start-Process -FilePath $War3Exe -ArgumentList "-loadfile `"$TestMap`"" -PassThru
+$war3 = Start-Process -FilePath $War3Exe -ArgumentList "-window", "-loadfile", "$TestMap" -PassThru
 
 # ── Step 4: Wait for results ───────────────────────────────────
 Write-Host "[4/4] Waiting for test results (${Timeout}s timeout)..."

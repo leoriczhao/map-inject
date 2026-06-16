@@ -9,9 +9,9 @@ local message = require "jass.message"
 local runtime = require "jass.runtime"
 local japi    = require "jass.japi"
 local hook    = require "jass.hook"
-local slk     = require "jass.slk"
 local util    = require "lib.util"
 
--- Defer test suite to run after hashtable init (exec-lua:0 callback)
+-- Run test suite via timer (deferred execution)
 local test_mod = require "tests.test_suite"
-jass.code(test_mod.run)
+local timer = jass.CreateTimer()
+jass.TimerStart(timer, 0.01, false, test_mod.run)

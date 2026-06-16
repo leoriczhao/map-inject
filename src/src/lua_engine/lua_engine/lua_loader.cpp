@@ -20,6 +20,7 @@
 #include <string_view>
 #include <base/util/string_algorithm.h>
 #include <cstdio>
+#include "debug_log.h"
 
 namespace warcraft3::lua_engine::lua_loader {
 
@@ -103,28 +104,37 @@ namespace warcraft3::lua_engine::lua_loader {
 	void initialize()
 	{
 		lua_State* L = getMainL();
-		if (!L) return;
+		if (!L) {
+			DBG_LOG("getMainL() returned NULL");
+			return;
+		}
+
+		DBG_LOG("getMainL() OK, L=%p", L);
 
 		// Try to load war3map.lua from the MPQ
 		const char* buf = 0;
 		size_t      len = 0;
 		if (storm_s::instance().load_file("script\\war3map.lua", (const void**)&buf, &len))
 		{
+			DBG_LOG("storm load OK, len=%zu", len);
+
 			if (luaL_loadbuffer(L, buf, len, "@script\\war3map.lua") != LUA_OK) {
-				printf("[japi-lua] load error: %s\n", lua_tostring(L, -1));
+				const char* err = lua_tostring(L, -1);
+				DBG_LOG("LUA LOAD ERROR: %s", err ? err : "null");
 				lua_pop(L, 1);
 				storm_s::instance().unload_file(buf);
 			}
 			else
 			{
+				DBG_LOG("luaL_loadbuffer OK, calling safe_call...");
 				safe_call(L, 0, 0, true);
 				storm_s::instance().unload_file(buf);
-				printf("[japi-lua] war3map.lua loaded\n");
+				DBG_LOG("war3map.lua loaded OK");
 			}
 		}
 		else
 		{
-			printf("[japi-lua] war3map.lua not found in MPQ\n");
+			DBG_LOG("storm load FAILED - war3map.lua not in MPQ");
 		}
 
 		// Register EXExecuteScript (always, even if war3map.lua is missing)

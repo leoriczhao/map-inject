@@ -46,21 +46,28 @@ map-inject/
 │   │   │   └── war3_searcher.h/cpp
 │   │   ├── lua_engine/         ← 从 YDWE 提取的 Lua 引擎（改编）
 │   │   │   ├── lua_loader.cpp  # 改编：Initialize() 主动启动
+│   │   │   ├── bridge_dispatch.cpp  # UnitId hook + 哈希表 RPC 分发
 │   │   │   ├── open_lua_engine.cpp
 │   │   │   ├── jassbind.h/cpp
 │   │   │   ├── callback.h/cpp
 │   │   │   └── libs_*.cpp      # jass.common, jass.hook, jass.japi 等
 │   │   └── extensions/         ← 自定义扩展 native
 │   └── vendor/
-│       └── lua-5.3.6-src/
+│       └── lua-5.4/
 │
 ├── tools/                       ← 构建 & 打包工具
-│   ├── callback                # exploit JASS 代码
-│   ├── core/                   # MemHackAPI JASS 库
-│   ├── pack.ps1                # MPQ 打包脚本（Lua 合并 + DLL 注入 + patch）
+│   ├── callback                # exploit JASS 代码（通过 StartCampaignAI 加载）
+│   ├── pack.ps1                # MPQ 打包脚本（Lua 合并 + DLL 注入，不动 war3map.j）
 │   ├── deploy.ps1              # 打包 + 部署 + 启动 War3 + 等结果
 │   ├── pjass.exe               # JASS 语法检查
 │   └── w3x2lni/                # 地图格式转换
+│
+├── reference/
+│   ├── base.w3m                # 基座地图（干净的 war3map.j + initializePlugin）
+│   ├── vanilla_map/            # 基座地图的 unpacked 源文件
+│   ├── builtin-japi/           # 内置 JAPI 参考（wenhao_plugin）
+│   ├── YDWE/                   # YDWE 完整源码（编译基座）
+│   └── ...
 │
 ├── docs/                        ← 文档
 │   ├── architecture/
@@ -84,6 +91,22 @@ map-inject/
 | yd_lua_engine | `Development/Plugin/Warcraft3/yd_lua_engine/` | Lua 引擎、jass.* 模块 |
 | yd_jass_api | `Development/Plugin/Warcraft3/yd_jass_api/` | EX* 扩展 native |
 
+## 架构
+
+```
+war3map.j（干净，只调标准 JASS native）
+  └→ initializePlugin()
+       └→ StartCampaignAI(Player(12), "callback")  ← 加载 exploit
+            └→ callback（内存 exploit + DLL 加载）
+                 └→ japi.tga (yd_japi.dll)
+                      ├→ hook UnitId → 哈希表 RPC 分发到 Lua
+                      └→ 创建 Lua VM → 加载 war3map.lua
+```
+
+- **war3map.j**：干净的 JASS，只调 `UnitId`/`SaveStr`/`LoadReal` 等标准 native
+- **callback**：exploit 代码，通过 `StartCampaignAI` 加载（AI 脚本不走 JASS 检测）
+- **DLL**：hook `UnitId` 做 JASS→Lua 分发，哈希表传参
+
 ## Callback 模式适配要点
 
 | YDWE 原始机制 | 问题 | 改编方案 |
@@ -91,6 +114,7 @@ map-inject/
 | nf_register.cpp hook StormAlloc | VM 已初始化，hook 不触发 | Initialize() 里直接调 nfunction_add |
 | lua_loader.cpp hook war3map.j | war3map.j 已执行 | Initialize() 里主动创建 lua_State |
 | yd_jass_api 依赖 event_add 信号 | 信号不会触发 | 直接调 japi_add/japi_table_add |
+| JASS→Lua 通过 nfunction_add 注册 | 通不过 JASS 检测 | hook UnitId + 哈希表 RPC（内置 JAPI 方案） |
 
 ## 构建（DLL 编译）
 
@@ -103,7 +127,7 @@ cd src
 ## 打包 & 测试（地图开发）
 
 ```powershell
-# 打包地图（合并 Lua + 注入 DLL + patch war3map.j）
+# 打包地图（合并 Lua + 注入 DLL，不动 war3map.j）
 .\tools\pack.ps1
 # 输出：build/output.w3x
 

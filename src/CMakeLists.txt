@@ -57,6 +57,7 @@ set(LUA_ENGINE_SOURCES
     src/lua_engine/lua_engine/libs_message.cpp
     src/lua_engine/lua_engine/libs_storm.cpp
     src/lua_engine/lua_engine/fix_baselib.cpp
+    src/lua_engine/lua_engine/bridge_dispatch.cpp
 )
 
 set(EXT_SOURCES
@@ -87,6 +88,9 @@ target_compile_definitions(yd_japi PRIVATE
     _CRT_SECURE_NO_WARNINGS
     _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS
 )
+
+# Debug logging (console + async file). Comment out for release.
+target_compile_definitions(yd_japi PRIVATE JAPI_DEBUG)
 
 if(MSVC)
     target_compile_options(yd_japi PRIVATE /W3 /EHsc)

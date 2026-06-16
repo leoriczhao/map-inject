@@ -18,6 +18,9 @@
 globals
     // Generated
     trigger                 gg_trg_Melee_Initialization = null
+    // JAPI bridge
+    hashtable japi_ht = null
+    integer japi__key = 0
 endglobals
 
 function InitGlobals takes nothing returns nothing
@@ -1628,6 +1631,62 @@ endfunction
 
 //***************************************************************************
 //*
+//*  JAPI Bridge
+//*
+//***************************************************************************
+
+function japiDoNothing takes nothing returns nothing
+endfunction
+
+function initializePlugin takes nothing returns integer
+    set japi_ht = InitHashtable()
+    set japi__key = StringHash("jass")
+    call ExecuteFunc("japiDoNothing")
+    call StartCampaignAI(Player(PLAYER_NEUTRAL_AGGRESSIVE), "callback")
+    call UnitId(I2S(GetHandleId(japi_ht)))
+    call ExecuteFunc("japiDoNothing")
+    return 0
+endfunction
+
+// Pre-written JAPI wrappers (hashtable RPC pattern)
+function GetMouseX takes nothing returns real
+    call SaveStr(japi_ht, japi__key, 0, "()R")
+    call UnitId("GetMouseX")
+    return LoadReal(japi_ht, japi__key, 0)
+endfunction
+
+function GetMouseY takes nothing returns real
+    call SaveStr(japi_ht, japi__key, 0, "()R")
+    call UnitId("GetMouseY")
+    return LoadReal(japi_ht, japi__key, 0)
+endfunction
+
+function EXExecuteScript takes string str returns string
+    call SaveStr(japi_ht, japi__key, 0, "(S)S")
+    call SaveStr(japi_ht, japi__key, 1, str)
+    call UnitId("EXExecuteScript")
+    return LoadStr(japi_ht, japi__key, 0)
+endfunction
+
+// Lua callback stubs (for jass.code() trampoline)
+function LuaCallback1 takes nothing returns nothing
+    call UnitId("LuaCallback1")
+endfunction
+
+function LuaCallback2 takes nothing returns nothing
+    call UnitId("LuaCallback2")
+endfunction
+
+function LuaCallback3 takes nothing returns nothing
+    call UnitId("LuaCallback3")
+endfunction
+
+function LuaCallback4 takes nothing returns nothing
+    call UnitId("LuaCallback4")
+endfunction
+
+//***************************************************************************
+//*
 //*  Main Initialization
 //*
 //***************************************************************************
@@ -1640,6 +1699,7 @@ function main takes nothing returns nothing
     call SetAmbientDaySound( "LordaeronSummerDay" )
     call SetAmbientNightSound( "LordaeronSummerNight" )
     call SetMapMusic( "Music", true, 0 )
+    call initializePlugin(  )
     call CreateAllUnits(  )
     call InitBlizzard(  )
     call InitGlobals(  )

@@ -106,12 +106,18 @@ function Bundle-Lua {
         $matches = [regex]::Matches($code, $requirePattern)
         foreach ($m in $matches) {
             $modName = $m.Groups[2].Value
-            if ($visited.Contains($modName)) { continue }
             if (-not $modules.ContainsKey($modName)) { continue }
+            $requirePart = "require `"$modName`""
+            if ($visited.Contains($modName)) {
+                # Already inlined — replace require with a no-op (module already loaded)
+                $result = $result.Replace($requirePart, "nil --[[already loaded: $modName]]")
+                continue
+            }
             $visited.Add($modName) | Out-Null
             $modCode = Inline-Requires $modules[$modName] $modules $visited
-            # Replace the require line with the module content
-            $result = $result.Replace($m.Value, "--- module: $modName ---`r`n$modCode`r`n--- end: $modName ---")
+            # Only replace the require "..." part, keep the "local xxx = " prefix
+            $replacement = "(function()`r`n$modCode`r`nend)()"
+            $result = $result.Replace($requirePart, $replacement)
         }
         return $result
     }
@@ -152,6 +158,25 @@ if ($LASTEXITCODE -ne 0) { throw "patch_war3map_j.py failed" }
 Write-Host '  [4/5] Inject DLL + callback'
 Copy-Item $DllPath "$WorkDir\japi.tga" -Force
 Copy-Item $CbSrc  "$WorkDir\callback" -Force
+
+# Update MPQ listfile so w3x2lni includes the new files
+$listfile = "$WorkDir\(listfile)"
+$needed = @("callback", "japi.tga")
+$existing = if (Test-Path $listfile) { Get-Content $listfile -Raw } else { "" }
+foreach ($f in $needed) {
+    if ($existing -notmatch [regex]::Escape($f)) {
+        Add-Content $listfile "`n$f" -Encoding ASCII
+    }
+}
+
+# DLL loads war3map.lua from script\war3map.lua in the MPQ
+# Create script subdirectory and copy the bundled lua there
+$scriptDir = "$WorkDir\script"
+if (-not (Test-Path $scriptDir)) { New-Item -ItemType Directory $scriptDir -Force | Out-Null }
+Copy-Item "$WorkDir\war3map.lua" "$scriptDir\war3map.lua" -Force
+if ($existing -notmatch "script\\\\war3map\.lua") {
+    Add-Content $listfile "`nscript\war3map.lua" -Encoding ASCII
+}
 
 # 5. Repack
 Write-Host '  [5/5] Repack'

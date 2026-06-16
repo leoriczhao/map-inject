@@ -1047,10 +1047,11 @@ if GetModuleHandle(buffer[1])==0 then
 	call ExportFileFromMpq(buffer[2] , buffer[1])
 	call LoadLibrary(buffer[1])
 endif
-call WriteRealMemory(buffer[2] + 0 , 0x6C6C6163)
-call WriteRealMemory(buffer[2] + 4 , 0x00000000)
+call WriteRealMemory(buffer[2] + 0 , 0x74696E49)
+call WriteRealMemory(buffer[2] + 4 , 0x696C6169)
+call WriteRealMemory(buffer[2] + 8 , 0x0000657A)
 set i=GetModuleProcAddress(buffer[1] , buffer[2])
-call CallCdeclWith1Args(i , pExportFromMpq)
+call CallCdeclWith1Args(i , 0)
 
 
 endfunction

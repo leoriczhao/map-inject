@@ -1,6 +1,6 @@
-输入路径：C:/Users/leoric/Desktop/code/map-inject/build
-输出路径：C:/Users/leoric/Desktop/code/map-inject/demo.w3x
+输入路径：C:/Users/leoric/Desktop/code/map-inject/build/work
+输出路径：C:/Users/leoric/Desktop/code/map-inject/build/output.w3x
 输入格式：Dir
 输出模式：pack
 结果：0 个错误，0 条警告
-用时：0.554 秒
+用时：0.145 秒
