@@ -26,7 +26,7 @@ namespace warcraft3::lua_engine::lua_loader {
 
 	static lua_State* mainL = 0;
 
-	static lua_State* getMainL()
+	lua_State* getMainL()
 	{
 		if (!mainL) {
 			lua_State* L = newstate();

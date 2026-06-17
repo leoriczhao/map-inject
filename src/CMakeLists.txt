@@ -56,6 +56,8 @@ set(LUA_ENGINE_SOURCES
     src/lua_engine/lua_engine/libs_debug.cpp
     src/lua_engine/lua_engine/libs_message.cpp
     src/lua_engine/lua_engine/libs_storm.cpp
+    src/lua_engine/lua_engine/libs_sleep.cpp
+    src/lua_engine/lua_engine/libs_slk.cpp
     src/lua_engine/lua_engine/fix_baselib.cpp
     src/lua_engine/lua_engine/bridge_dispatch.cpp
 )
