@@ -1,24 +1,57 @@
-# map-inject — WAR3 地图注入方案（YDWE 基座 + 扩展）
+# map-inject — WAR3 地图注入方案
 
 ## 项目目标
 
-基于 YDWE 核心源码编译适配的 DLL 链作为基座，通过 callback exploit 在 MPQ 模式下加载，提供 Lua 引擎 + JASS 扩展 native。在此基础上编写自定义扩展。
+复刻内置 JAPI（wenhao_plugin）的功能，通过 callback exploit 在 MPQ 模式下加载，提供 Lua 引擎 + JASS 扩展 native + 游戏数据查询。
 
-## 技术路线
+## 参考项目关系
 
-**Callback exploit（入口）→ YDWE DLL 链（基座，自编译适配）→ 自定义扩展 DLL**
+```
+┌─────────────────────────────────────────────────────┐
+│                    我们的项目 (map-inject)              │
+│                                                     │
+│  目标：复刻 builtin-japi 的功能                        │
+│  代码基础：从 YDWE 提取核心模块，改编适配                │
+│  native 签名参考：UjAPI                               │
+└──────┬──────────────────┬──────────────────┬─────────┘
+       │                  │                  │
+       ▼                  ▼                  ▼
+  ┌─────────┐      ┌──────────────┐    ┌─────────┐
+  │  YDWE   │      │ builtin-japi │    │  UjAPI  │
+  │ (编辑器) │      │ (wenhao_plugin)│   │(2333插件)│
+  └─────────┘      └──────────────┘    └─────────┘
+```
 
-- YDWE 的 `nf_register.cpp` hook `StormAlloc` 检测 VM 初始化，在 callback 模式下不触发（VM 已初始化）
-- 需要改编：改为 DLL 加载时直接调用 `nfunction_add` 注册 native
-- YDWE 的 `lua_loader.cpp` hook war3map.j 加载，在 callback 模式下需要适配
-- 需要改编：改为 `Initialize()` 里主动创建 lua_State 并加载 war3map.lua
+| 项目 | 角色 | 说明 |
+|------|------|------|
+| **YDWE** | 代码库来源 | 完整的 War3 编辑器插件框架。我们从里面提取 yd_core、lua_engine、SlkLib 等核心模块，改编适配后编译进我们的 DLL |
+| **builtin-japi (wenhao_plugin)** | 功能参考 | 内置 JAPI 插件，独立 DLL，跑在 War3 进程里。**我们要实现的功能就是它提供的功能**。和 YDWE 共享同一套 C++ 代码谱系（同一个 SlkLib、jass 接口层） |
+| **UjAPI** | native 签名参考 | 2333 的 JAPI 扩展，提供 EX* 系列 native 的函数签名。我们用它的签名来注册 native |
 
-## 核心原理
+**关键区别**：YDWE 跑在编辑器里，builtin-japi 跑在游戏里。我们的 DLL 跑在游戏里，所以行为上对标 builtin-japi，代码上从 YDWE 提取。
 
-1. **Callback exploit**：利用 jasshelper 类型混淆（`l__` 前缀）获取任意内存读写能力
-2. **DLL 加载**：ExportFileFromMpq + LoadLibrary 加载 YDWE DLL 链
-3. **Native 注册**：改编 nf_register.cpp，在 Initialize() 时直接调 nfunction_add
-4. **Lua 引擎**：改编 lua_loader.cpp，Initialize() 里主动创建 lua_State + 加载 war3map.lua
+### builtin-japi 功能清单（我们要实现的）
+
+builtin-japi 提供以下 `jass.*` Lua 模块：
+
+| 模块 | 用途 | 状态 |
+|------|------|------|
+| `jass.common` | JASS native 调用（metatable 自动分发） | ✓ 已实现 |
+| `jass.japi` | 自定义 native 注册（Lua 侧注册 handler） | ✓ 已实现 |
+| `jass.hook` | native hook（拦截/替换 JASS 函数） | ✓ 已实现 |
+| `jass.runtime` | 运行时配置（sleep、console、handle_level 等） | ✓ 已实现 |
+| `jass.message` | 输入消息系统（键盘、鼠标、命令、选择） | ✓ 已实现 |
+| `jass.debug` | 调试工具 | ✓ 已实现 |
+| `jass.slk` | 游戏数据表查询（ability/unit/item 等 SLK 数据） | ✗ 待实现 |
+| `jass.sleep` | 协程 sleep（TriggerSleepAction 集成） | ✗ 待实现 |
+| `jass.storm` | MPQ 文件读取 | ✗ 待实现 |
+
+### 实现原则
+
+1. **功能对标 builtin-japi**：实现什么功能、暴露什么接口，以 builtin-japi 为准
+2. **代码从 YDWE 提取**：具体实现从 YDWE 源码里提取核心模块，改编适配 callback 模式
+3. **native 签名参考 UjAPI**：EX* 系列 native 的函数签名以 UjAPI 为准
+4. **callback 模式适配**：YDWE 原始代码面向编辑器，需要改编为面向游戏进程（详见适配要点表）
 
 ## 项目结构
 
