@@ -64,6 +64,14 @@ set(LUA_ENGINE_SOURCES
 
 set(EXT_SOURCES
     src/extensions/dllmain.cpp
+    src/extensions/custom_natives.cpp
+    src/extensions/ex_natives/Initialize.cpp
+    src/extensions/ex_natives/UnitState.cpp
+    src/extensions/ex_natives/AbilityState.cpp
+    src/extensions/ex_natives/ItemState.cpp
+    src/extensions/ex_natives/Effect.cpp
+    src/extensions/ex_natives/EventDamageData.cpp
+    src/extensions/ex_natives/DisplayChat.cpp
     src/stubs.cpp
 )
 
