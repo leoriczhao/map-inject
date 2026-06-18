@@ -124,9 +124,4 @@ namespace base::hook {
     }
 }
 
-// === warcraft3::japi::initialize ===
-namespace warcraft3::japi {
-    void initialize() {
-        // No-op: yd_jass_api extensions not available in minimal build.
-    }
-}
+// warcraft3::japi::initialize is defined in extensions/custom_natives.cpp

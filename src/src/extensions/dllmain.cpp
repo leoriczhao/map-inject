@@ -18,6 +18,7 @@ namespace warcraft3::lua_engine::lua_loader {
 // Forward declarations for yd_jass_api initialization
 namespace warcraft3::japi {
     void initialize();
+    void initialize_ex_natives();
 }
 
 static bool g_initialized = false;
@@ -37,6 +38,9 @@ extern "C" __declspec(dllexport) void __cdecl Initialize()
 
     // Register yd_jass_api extensions (EX* natives)
     warcraft3::japi::initialize();
+
+    // Register EX* natives ported from YDWE yd_jass_api
+    warcraft3::japi::initialize_ex_natives();
 
     // Flush — register all queued japi_add/japi_hook entries
     warcraft3::jass::nf_register::flush();
