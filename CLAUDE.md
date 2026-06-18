@@ -25,8 +25,8 @@
 | 项目 | 角色 | 说明 |
 |------|------|------|
 | **YDWE** | 代码库来源 | 完整的 War3 编辑器插件框架。我们从里面提取 yd_core、lua_engine、SlkLib 等核心模块，改编适配后编译进我们的 DLL |
-| **builtin-japi (wenhao_plugin)** | 功能参考 | 内置 JAPI 插件，独立 DLL，跑在 War3 进程里。**我们要实现的功能就是它提供的功能**。和 YDWE 共享同一套 C++ 代码谱系（同一个 SlkLib、jass 接口层） |
-| **UjAPI** | native 签名参考 | 2333 的 JAPI 扩展，提供 EX* 系列 native 的函数签名。我们用它的签名来注册 native |
+| **builtin-japi (wenhao_plugin)** | 功能参考（已逆向） | 内置 JAPI 插件，独立 DLL，跑在 War3 进程里。**我们要实现的功能就是它提供的功能**。和 YDWE 共享同一套 C++ 代码谱系（同一个 SlkLib、jass 接口层）。逆向报告：`reference/builtin-japi/wenhao_plugin逆向分析报告.html` |
+| **UjAPI** | native 签名参考（已逆向） | 2333 的 JAPI 扩展，提供 EX* 系列 native 的函数签名。我们用它的签名来注册 native。参考手册：`reference/ujapi/UjAPI_Native参考手册.html`，JASS 源码：`reference/ujapi/UjAPI.j` |
 
 **关键区别**：YDWE 跑在编辑器里，builtin-japi 跑在游戏里。我们的 DLL 跑在游戏里，所以行为上对标 builtin-japi，代码上从 YDWE 提取。
 
@@ -98,9 +98,23 @@ map-inject/
 ├── reference/
 │   ├── base.w3m                # 基座地图（干净的 war3map.j + initializePlugin）
 │   ├── vanilla_map/            # 基座地图的 unpacked 源文件
-│   ├── builtin-japi/           # 内置 JAPI 参考（wenhao_plugin）
-│   ├── YDWE/                   # YDWE 完整源码（编译基座）
-│   └── ...
+│   ├── builtin-japi/           # 内置 JAPI 逆向（wenhao_plugin）
+│   │   ├── wenhao_plugin逆向分析报告.html  # 完整逆向报告（DLL 结构、模块、内存布局）
+│   │   ├── callback            # exploit JASS 代码
+│   │   ├── main.lua            # Lua 示例代码（slk/message/keyboard 用法）
+│   │   └── war3map.j           # JASS 代码（japi bridge、wrapper、trampoline）
+│   ├── ujapi/                  # UjAPI 逆向（2333 插件）
+│   │   ├── UjAPI_Native参考手册.html  # EX* native 签名手册
+│   │   ├── UjAPI.j             # UjAPI JASS 源码
+│   │   ├── ujapi_common.j      # 通用 native 声明
+│   │   └── ujapi_wrapper.j     # wrapper 函数
+│   ├── YDWE/                   # YDWE 完整源码（代码库来源）
+│   │   └── Development/
+│   │       ├── Core/ydbase/    # hook 框架
+│   │       ├── Core/ydwar3/    # JASS VM 接口
+│   │       ├── Core/SlkLib/    # SLK 解析器（ObjectManager、SlkReader）
+│   │       └── Plugin/Warcraft3/yd_lua_engine/  # Lua 引擎
+│   └── old-japi/               # 旧方案存档
 │
 ├── docs/                        ← 文档
 │   ├── architecture/
