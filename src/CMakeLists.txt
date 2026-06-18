@@ -62,6 +62,23 @@ set(LUA_ENGINE_SOURCES
     src/lua_engine/lua_engine/bridge_dispatch.cpp
 )
 
+# SlkLib (from YDWE SlkLib, read-only MPQ access)
+set(SLK_SOURCES
+    src/slk/ObjectManager.cpp
+    src/slk/Converter.cpp
+    src/slk/table/VariableData.cpp
+    src/slk/reader/CommonReader.cpp
+    src/slk/reader/SlkReader.cpp
+    src/slk/reader/MetaReader.cpp
+    src/slk/reader/TxtReader.cpp
+    src/slk/reader/ObjReader.cpp
+    src/slk/reader/IniReader.cpp
+    src/slk/reader/WtsReader.cpp
+    src/slk/reader/WesReader.cpp
+    src/slk/converter/AttributeMeta.cpp
+    src/slk/converter/ConvertTable.cpp
+)
+
 set(EXT_SOURCES
     src/extensions/dllmain.cpp
     src/stubs.cpp
@@ -70,6 +87,7 @@ set(EXT_SOURCES
 add_library(yd_japi SHARED
     ${YD_CORE_SOURCES}
     ${LUA_ENGINE_SOURCES}
+    ${SLK_SOURCES}
     ${EXT_SOURCES}
 )
 
@@ -85,6 +103,7 @@ target_link_libraries(yd_japi PRIVATE lua54)
 target_compile_definitions(yd_japi PRIVATE
     YDWE_WAR3_INLINE
     YDWE_BASE_INLINE
+    SLKLIB_INLINE
     WIN32
     _WINDOWS
     _CRT_SECURE_NO_WARNINGS
