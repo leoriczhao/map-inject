@@ -164,10 +164,9 @@ target_compile_definitions(newD3d9 PRIVATE
     _CRT_SECURE_NO_WARNINGS
 )
 
-# Link against d3d9.lib and d3dx9.lib (for D3DXCreateTextureFromFile)
+# Link against d3d9.lib only (D3DX9 loaded dynamically via LoadLibrary)
 target_link_libraries(newD3d9 PRIVATE
     d3d9
-    d3dx9
 )
 
 if(MSVC)

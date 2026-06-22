@@ -138,7 +138,7 @@ HRESULT STDMETHODCALLTYPE CDirect3DDevice9::GetRasterStatus(UINT iSwapChain, D3D
     return m_pDevice->GetRasterStatus(iSwapChain, pRasterStatus);
 }
 
-HRESULT STDMETHODCALLTYPE CDirect3DDevice9::SetDialogBoxMode(WINBOOL bEnableDialogs)
+HRESULT STDMETHODCALLTYPE CDirect3DDevice9::SetDialogBoxMode(BOOL bEnableDialogs)
 {
     return m_pDevice->SetDialogBoxMode(bEnableDialogs);
 }

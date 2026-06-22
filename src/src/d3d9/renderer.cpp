@@ -6,7 +6,7 @@
 // All rendering happens in on_end_scene(), called from the hooked EndScene().
 
 #include "renderer.h"
-#include <d3dx9.h>
+#include <d3d9.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -85,20 +85,33 @@ void FontObj::destroy()
 
 // ── Texture loading helper ────────────────────────────────────
 
-// Load a BLP/TGA/BMP texture from a War3-style path.
-// Searches the MPQ chain via D3DXCreateTextureFromFile or fallback.
-// For simplicity, we try D3DX first, then fall back to plain file.
+// Load a texture from a file path (BMP/TGA/JPG/PNG).
+// Uses D3DXCreateTextureFromFileA if d3dx9 is available,
+// otherwise falls back to D3DXCreateTextureFromFileEx via LoadLibrary.
 static IDirect3DTexture9* load_texture(IDirect3DDevice9* dev, const char* path)
 {
     if (!path || !path[0]) return nullptr;
 
-    // Try loading from file directly (works for loose files)
-    IDirect3DTexture9* tex = nullptr;
-    HRESULT hr = D3DXCreateTextureFromFileA(dev, path, &tex);
-    if (SUCCEEDED(hr) && tex) return tex;
+    // Try loading via D3DX9 if available
+    static HMODULE hD3DX9 = nullptr;
+    static HRESULT (WINAPI *pfnD3DXCreateTextureFromFileA)(
+        IDirect3DDevice9*, const char*, IDirect3DTexture9**) = nullptr;
 
-    // If D3DX is not available, try CreateTexture + manual load
-    // For now, just return nullptr if D3DX fails
+    if (!hD3DX9) {
+        hD3DX9 = LoadLibraryA("d3dx9_43.dll");
+        if (!hD3DX9) hD3DX9 = LoadLibraryA("d3dx9_33.dll");
+        if (hD3DX9) {
+            pfnD3DXCreateTextureFromFileA = (decltype(pfnD3DXCreateTextureFromFileA))
+                GetProcAddress(hD3DX9, "D3DXCreateTextureFromFileA");
+        }
+    }
+
+    if (pfnD3DXCreateTextureFromFileA) {
+        IDirect3DTexture9* tex = nullptr;
+        HRESULT hr = pfnD3DXCreateTextureFromFileA(dev, path, &tex);
+        if (SUCCEEDED(hr) && tex) return tex;
+    }
+
     return nullptr;
 }
 

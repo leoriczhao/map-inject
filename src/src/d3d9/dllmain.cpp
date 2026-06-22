@@ -11,7 +11,6 @@
 // It is typically renamed from newD3d9.dll to d3d9.dll or loaded via DLL proxy.
 
 #include <windows.h>
-#include <d3d9.h>
 #include "CDirect3D9.h"
 #include "api.h"
 
@@ -44,7 +43,8 @@ static bool load_real_d3d9()
 // ── Exported functions ────────────────────────────────────────
 
 // Direct3DCreate9 — called by War3 to create the D3D9 device
-extern "C" __declspec(dllexport) IDirect3D9* WINAPI Direct3DCreate9(UINT SDKVersion)
+// Exported via /export linker directive (avoids d3d9.h __declspec(dllimport) conflict)
+IDirect3D9* WINAPI Direct3DCreate9(UINT SDKVersion)
 {
     if (!load_real_d3d9()) {
         MessageBoxA(nullptr, "Failed to load real d3d9.dll", "newD3d9.dll Error", MB_OK | MB_ICONERROR);

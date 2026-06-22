@@ -5,6 +5,7 @@
 
 #include <windows.h>
 #include <cstdio>
+#include <warcraft3/jass.h>
 #include <warcraft3/jass/nf_register.h>
 #include <warcraft3/jass/hook.h>
 #include <warcraft3/war3_searcher.h>

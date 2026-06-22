@@ -26,12 +26,10 @@ target_compile_definitions(newD3d9 PRIVATE
     _CRT_SECURE_NO_WARNINGS
 )
 
-# Link against d3d9.lib and d3dx9.lib (for D3DXCreateTextureFromFile)
-# d3d9.lib is the import library for d3d9.dll
-# d3dx9.lib provides D3DX helper functions
+# Link against d3d9.lib only (import library for d3d9.dll)
+# D3DX9 functions are loaded dynamically via LoadLibrary in renderer.cpp
 target_link_libraries(newD3d9 PRIVATE
     d3d9
-    d3dx9
 )
 
 if(MSVC)
