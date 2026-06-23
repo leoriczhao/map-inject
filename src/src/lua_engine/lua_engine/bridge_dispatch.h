@@ -28,6 +28,12 @@ namespace warcraft3::lua_engine::bridge {
     // Initialize the UnitId hook. Called from lua_loader::initialize().
     void initialize();
 
+    // Set the real UnitId function pointer (for external hooking).
+    void set_real_unitid(uintptr_t addr);
+
+    // Get the FakeUnitId function pointer (for external hooking).
+    uintptr_t get_fake_unitid();
+
     // Get the shared hashtable handle (set during JASS init via UnitId(I2S(GetHandleId(japi_ht)))).
     uint32_t get_ht_handle();
 

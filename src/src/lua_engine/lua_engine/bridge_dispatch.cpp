@@ -12,6 +12,8 @@
 #include <warcraft3/jass.h>
 #include <warcraft3/jass/hook.h>
 #include <warcraft3/jass/func_value.h>
+#include <warcraft3/hashtable.h>
+#include <warcraft3/war3_searcher.h>
 #include <base/hook/fp_call.h>
 #include <lua.hpp>
 #include <map>
@@ -20,6 +22,21 @@
 #include <cstdio>
 #include <cstdlib>
 #include "debug_log.h"
+
+// Synchronous debug log macro (works even if async log hasn't flushed)
+// Accepts both string literals and char arrays
+inline void sync_log_impl(const char* msg) {
+    HANDLE h = CreateFileA("C:\\ProgramData\\japi_sync.log",
+        FILE_APPEND_DATA, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+        NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h != INVALID_HANDLE_VALUE) {
+        DWORD bw;
+        WriteFile(h, msg, (DWORD)strlen(msg), &bw, NULL);
+        WriteFile(h, "\r\n", 2, &bw, NULL);
+        CloseHandle(h);
+    }
+}
+#define SYNC_LOG(msg) sync_log_impl(msg)
 
 namespace warcraft3::lua_engine::bridge {
 
@@ -232,18 +249,112 @@ namespace warcraft3::lua_engine::bridge {
 
     // ── UnitId hook ────────────────────────────────────────────────
 
+    // Hook UnitId using the linked list at [[JassEnv+0x14]+0x20]
+    // This is the same mechanism as the callback's CreateJassNativeHook.
+    // Node layout: [+0] = next pointer, [+12] = func_address_
+    // The hash table is for name-based lookup; the linked list is for dispatch.
+    static bool list_hook_by_name(const char* proc_name, uintptr_t* old_proc_ptr, uintptr_t new_proc)
+    {
+        // First, find the function address using the hash table
+        auto* node_ptr = warcraft3::get_native_function_hashtable()->find(proc_name);
+        if (!node_ptr) {
+            SYNC_LOG("list_hook_by_name: node not found in hash table");
+            return false;
+        }
+
+        uint32_t old_address = node_ptr->func_address_;
+        *old_proc_ptr = (uintptr_t)old_address;
+
+        char buf[256];
+        snprintf(buf, sizeof(buf), "list_hook_by_name: old_address=0x%08X, new_proc=0x%08X", old_address, (uint32_t)new_proc);
+        SYNC_LOG(buf);
+
+        // Now walk the linked list and find the node with this address
+        SYNC_LOG("list_hook_by_name: getting war3_searcher...");
+        uintptr_t env = 0;
+        __try {
+            env = warcraft3::get_war3_searcher().get_instance(5);
+        } __except(EXCEPTION_EXECUTE_HANDLER) {
+            SYNC_LOG("list_hook_by_name: EXCEPTION in get_war3_searcher");
+            return false;
+        }
+        snprintf(buf, sizeof(buf), "list_hook_by_name: env=0x%08X", (uint32_t)env);
+        SYNC_LOG(buf);
+        if (!env) {
+            SYNC_LOG("list_hook_by_name: env is null");
+            return false;
+        }
+
+        SYNC_LOG("list_hook_by_name: reading table_ptr...");
+        uintptr_t table_ptr = *(uintptr_t*)(env + 0x14);
+        snprintf(buf, sizeof(buf), "list_hook_by_name: table_ptr=0x%08X", (uint32_t)table_ptr);
+        SYNC_LOG(buf);
+        if (!table_ptr) {
+            SYNC_LOG("list_hook_by_name: table_ptr is null");
+            return false;
+        }
+
+        SYNC_LOG("list_hook_by_name: reading first_node...");
+        uintptr_t first_node = *(uintptr_t*)(table_ptr + 0x20);
+        snprintf(buf, sizeof(buf), "list_hook_by_name: first_node=0x%08X", (uint32_t)first_node);
+        SYNC_LOG(buf);
+        if (!first_node) {
+            SYNC_LOG("list_hook_by_name: first_node is null");
+            return false;
+        }
+
+        uintptr_t current = first_node;
+        for (int i = 0; i < 10000; i++) {
+            uint32_t func_addr = *(uint32_t*)(current + 12);
+            if (func_addr < 0x3000) {
+                snprintf(buf, sizeof(buf), "list_hook_by_name: reached end of list at node %d, func_addr=0x%08X", i, func_addr);
+                SYNC_LOG(buf);
+                break;
+            }
+
+            if (func_addr == old_address) {
+                *(uint32_t*)(current + 12) = (uint32_t)new_proc;
+                snprintf(buf, sizeof(buf), "list_hook_by_name: FOUND and hooked at node %d, addr=0x%08X", i, (uint32_t)current);
+                SYNC_LOG(buf);
+                return true;
+            }
+
+            // Follow linked list: [+0] = next pointer
+            uintptr_t next = *(uintptr_t*)(current);
+            if (next == first_node || next == 0 || next < 0x10000) {
+                snprintf(buf, sizeof(buf), "list_hook_by_name: list end at node %d, next=0x%08X", i, (uint32_t)next);
+                SYNC_LOG(buf);
+                break;
+            }
+            current = next;
+        }
+
+        SYNC_LOG("list_hook_by_name: NOT FOUND in linked list");
+        return false;
+    }
+
+    // Safe wrapper for from_string that catches access violations
+    static const char* safe_from_string(jass::jstring_t str) {
+        __try {
+            return jass::from_string(str);
+        } __except(EXCEPTION_EXECUTE_HANDLER) {
+            return nullptr;
+        }
+    }
+
     static jass::jstring_t __cdecl FakeUnitId(jass::jstring_t name_str) {
-        const char* name = jass::from_string(name_str);
+        const char* name = safe_from_string(name_str);
         if (!name) {
             return base::c_call<jass::jstring_t>(RealUnitId, name_str);
         }
 
         // Initialization: UnitId(I2S(GetHandleId(japi_ht)))
-        // The string is a pure number — store as hashtable handle
         if (name[0] >= '0' && name[0] <= '9') {
             g_ht_handle = (uint32_t)std::atoll(name);
-            g_ht_key = (uint32_t)jass::call("StringHash", jass::string_fake("jass"));
-            log_message("[bridge] ht initialized");
+            g_ht_key = 697315052;  // StringHash("jass") — hardcoded to avoid JASS call during callback
+            char buf[128];
+            snprintf(buf, sizeof(buf), "[bridge] ht initialized: handle=%u key=%u", g_ht_handle, g_ht_key);
+            SYNC_LOG(buf);
             return 0;
         }
 
@@ -281,13 +392,23 @@ namespace warcraft3::lua_engine::bridge {
     }
 
     void initialize() {
-        // Hook UnitId via table_hook.
-        // NOTE: Do NOT call log_message() here — it calls JASS functions
-        // which may crash during callback context.
-        jass::table_hook("UnitId", (uintptr_t*)&RealUnitId, (uintptr_t)FakeUnitId);
+        // Hook is now done in dllmain.cpp via linked list (same as callback's CreateJassNativeHook).
+        // This function is kept for API compatibility but does nothing.
+        SYNC_LOG("bridge::initialize() — no-op (hook done in dllmain.cpp)");
     }
 
     uint32_t get_ht_handle() { return g_ht_handle; }
     uint32_t get_ht_key() { return g_ht_key; }
+
+    void set_real_unitid(uintptr_t addr) {
+        RealUnitId = addr;
+        char buf[256];
+        snprintf(buf, sizeof(buf), "set_real_unitid: RealUnitId=0x%08X", (uint32_t)addr);
+        SYNC_LOG(buf);
+    }
+
+    uintptr_t get_fake_unitid() {
+        return (uintptr_t)FakeUnitId;
+    }
 
 }  // namespace warcraft3::lua_engine::bridge

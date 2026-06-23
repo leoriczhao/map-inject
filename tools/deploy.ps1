@@ -21,7 +21,7 @@ $TestMap  = "Maps\Test\output.w3x"
 $PackScript = "$PSScriptRoot\pack.ps1"
 $OutFile  = "$Root\build\output.w3x"
 
-if (-not $LogFile) { $LogFile = "$War3Dir\japi-debug.log" }
+if (-not $LogFile) { $LogFile = "C:\ProgramData\japi_debug.txt" }
 
 # Resolve DllPath if provided
 if ($DllPath) {

@@ -149,8 +149,18 @@ if (-not (Test-Path $JFile)) {
 Write-Host '  [2/5] Bundle Lua'
 Bundle-Lua $MapDir "$WorkDir\war3map.lua"
 
-# 3. war3map.j — no patch needed
-Write-Host '  [3/5] war3map.j ready'
+# 3. war3map.j — patch: add deferred script loading after initializePlugin()
+Write-Host '  [3/5] Patching war3map.j'
+$jContent = Get-Content $JFile -Raw -Encoding ASCII
+# Add SaveStr + UnitId("LoadScript") after initializePlugin() call
+$old = 'call initializePlugin(  )'
+$new = @"
+call initializePlugin(  )
+    call SaveStr(japi_ht, japi__key, 0, "()V")
+    call UnitId("LoadScript")
+"@
+$jContent = $jContent.Replace($old, $new)
+Set-Content $JFile $jContent -Encoding ASCII -NoNewline
 
 # 4. Inject DLL and callback
 Write-Host '  [4/5] Inject DLL + callback'
