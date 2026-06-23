@@ -149,10 +149,16 @@ if (-not (Test-Path $JFile)) {
 Write-Host '  [2/5] Bundle Lua'
 Bundle-Lua $MapDir "$WorkDir\war3map.lua"
 
-# 3. Patch war3map.j with exploit + bridge
-Write-Host '  [3/5] Patch war3map.j with exploit + bridge'
-python "$Root\tools\patch_war3map_j.py" $JFile $JFile --lua "$WorkDir\war3map.lua"
-if ($LASTEXITCODE -ne 0) { throw "patch_war3map_j.py failed" }
+# 3. Patch war3map.j — insert LoadScript call after initializePlugin
+Write-Host '  [3/5] Patch war3map.j'
+$jContent = Get-Content $JFile -Raw -Encoding ASCII
+if ($jContent -notmatch 'LoadScript') {
+    $jContent = $jContent -replace '(call initializePlugin\s*\(\s*\))', "`$1`r`n    call SaveStr(japi_ht, japi__key, 0, `"()V`")`r`n    call UnitId(`"LoadScript`")"
+    Set-Content $JFile $jContent -Encoding ASCII
+    Write-Host '    Inserted LoadScript call'
+} else {
+    Write-Host '    LoadScript already present'
+}
 
 # 4. Inject DLL and callback
 Write-Host '  [4/5] Inject DLL + callback'

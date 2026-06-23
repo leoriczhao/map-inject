@@ -1700,6 +1700,9 @@ function main takes nothing returns nothing
     call SetAmbientNightSound( "LordaeronSummerNight" )
     call SetMapMusic( "Music", true, 0 )
     call initializePlugin(  )
+    // Deferred script loading — after callback returns and JASS VM is stable
+    call SaveStr(japi_ht, japi__key, 0, "()V")
+    call UnitId("LoadScript")
     call CreateAllUnits(  )
     call InitBlizzard(  )
     call InitGlobals(  )

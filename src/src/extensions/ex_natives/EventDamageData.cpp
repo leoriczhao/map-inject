@@ -205,10 +205,19 @@ bool __cdecl EXSetEventDamage(uint32_t value)
 
 void InitializeEventDamageData()
 {
-	RealUnitDamageFunc = base::hook::replace_pointer(getUnitDamageFunc(), (uintptr_t)FakeUnitDamageFunc);
-	jass::japi_hook("GetEventDamage", &RealGetEventDamage, (uintptr_t)FakeGetEventDamage);
+	// NOTE: GetEventDamage hook and unit damage hook disabled —
+	// japi_hook and replace_pointer modify game memory/JASS native table
+	// which conflicts with callback exploit hooks.
 	jass::japi_add((uintptr_t)EXGetEventDamageData, "EXGetEventDamageData", "(I)I");
 	jass::japi_add((uintptr_t)EXSetEventDamage,     "EXSetEventDamage",     "(R)B");
+}
+
+// Bridge dispatch handlers
+uint32_t EXGetEventDamageData_handler(const uint32_t* a, size_t) {
+	return (uint32_t)EXGetEventDamageData(a[0]);
+}
+uint32_t EXSetEventDamage_handler(const uint32_t* a, size_t) {
+	return EXSetEventDamage(a[0]) ? 1 : 0;
 }
 
 }

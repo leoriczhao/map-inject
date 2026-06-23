@@ -191,4 +191,12 @@ namespace warcraft3::japi {
 		jass::japi_add((uintptr_t)EXGetItemDataString, "EXGetItemDataString", "(II)S");
 		jass::japi_add((uintptr_t)EXSetItemDataString, "EXSetItemDataString", "(IIS)B");
 	}
+
+	// Bridge dispatch handlers
+	uint32_t EXGetItemDataString_handler(const uint32_t* a, size_t) {
+		return EXGetItemDataString(a[0], a[1]);
+	}
+	uint32_t EXSetItemDataString_handler(const uint32_t* a, size_t) {
+		return EXSetItemDataString(a[0], a[1], a[2]);
+	}
 }

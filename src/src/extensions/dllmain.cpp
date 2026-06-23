@@ -9,6 +9,8 @@
 #include <warcraft3/jass/nf_register.h>
 #include <warcraft3/jass/hook.h>
 #include <warcraft3/war3_searcher.h>
+#include "../lua_engine/lua_engine/lua_loader.h"
+#include "../lua_engine/lua_engine/bridge_dispatch.h"
 #include "debug_log.h"
 
 // Forward declarations for lua_engine initialization
@@ -36,22 +38,46 @@ extern "C" __declspec(dllexport) void __cdecl Initialize()
     if (g_initialized) return;
     g_initialized = true;
 
-    DBG_LOG("Initialize() START");
+    // Synchronous debug log — direct WriteFile, no sharing conflicts
+    #define SYNC_LOG(msg) do { \
+        HANDLE _h = CreateFileA("C:\\ProgramData\\japi_sync.log", \
+            FILE_APPEND_DATA, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, \
+            NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL); \
+        if (_h != INVALID_HANDLE_VALUE) { \
+            DWORD _bw; const char* _m = msg "\r\n"; \
+            WriteFile(_h, _m, (DWORD)strlen(_m), &_bw, NULL); \
+            CloseHandle(_h); \
+        } \
+    } while(0)
 
-    // Initialize the Lua engine
-    // This creates the Lua state, registers jass.* modules, loads war3map.lua
+    SYNC_LOG("Initialize() START");
+
+    // Step 0: Install UnitId hook (bridge dispatch)
+    SYNC_LOG("Step 0: bridge::initialize START");
+    warcraft3::lua_engine::bridge::initialize();
+    SYNC_LOG("Step 0: bridge::initialize DONE");
+
+    // Step 1: Create Lua VM (no JASS calls, no script loading)
+    SYNC_LOG("Step 1: lua_loader START");
     warcraft3::lua_engine::lua_loader::initialize();
+    SYNC_LOG("Step 1: lua_loader DONE");
 
-    DBG_LOG("lua_loader::initialize() DONE");
-
-    // Register yd_jass_api extensions (EX* natives)
-    warcraft3::japi::initialize();
-
-    // Register EX* natives ported from YDWE yd_jass_api
+    // Step 2: Register EX* natives via bridge dispatch
+    SYNC_LOG("Step 2: initialize_ex_natives START");
     warcraft3::japi::initialize_ex_natives();
+    SYNC_LOG("Step 2: initialize_ex_natives DONE");
 
-    // Flush — register all queued japi_add/japi_hook entries
-    warcraft3::jass::nf_register::flush();
+    // Step 3: Register LoadScript handler (deferred war3map.lua loading)
+    // This avoids calling JASS functions during Initialize() which would
+    // corrupt the callback exploit's memory state.
+    {
+        namespace lua_ld = warcraft3::lua_engine::lua_loader;
+        warcraft3::lua_engine::bridge::register_cpp_handler(
+            "LoadScript", "()V", lua_ld::LoadScript_bridge);
+        SYNC_LOG("Step 3: LoadScript handler registered");
+    }
+
+    SYNC_LOG("Initialize() DONE");
 
     // Register bridge-dispatched handlers (UnitId hashtable RPC)
     warcraft3::lua_engine::bridge::register_cpp_handler(

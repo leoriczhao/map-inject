@@ -52,4 +52,9 @@ void InitializeDisplayChat()
 	jass::japi_add((uintptr_t)EXDisplayChat, "EXDisplayChat", "(Hplayer;IS)V");
 }
 
+// Bridge dispatch handler
+uint32_t EXDisplayChat_handler(const uint32_t* a, size_t) {
+	EXDisplayChat(a[0], a[1], a[2]); return 0;
+}
+
 }

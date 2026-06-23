@@ -890,4 +890,50 @@ namespace warcraft3::japi {
 		jass::japi_add((uintptr_t)EXGetAbilityString,      "EXGetAbilityString",      "(III)S");
 		jass::japi_add((uintptr_t)EXSetAbilityString,      "EXSetAbilityString",      "(IIIS)B");
 	}
+
+	// Bridge dispatch handlers
+	static uint32_t make_jstr(const char* s) { return jass::create_string(s ? s : ""); }
+
+	uint32_t EXGetUnitAbility_handler(const uint32_t* a, size_t) {
+		return EXGetUnitAbilityById(a[0], a[1]);
+	}
+	uint32_t EXGetUnitAbilityByIndex_handler(const uint32_t* a, size_t) {
+		return EXGetUnitAbilityByIndex(a[0], a[1]);
+	}
+	uint32_t EXGetAbilityId_handler(const uint32_t* a, size_t) {
+		return EXGetAbilityId(a[0]);
+	}
+	uint32_t EXGetAbilityState_handler(const uint32_t* a, size_t) {
+		return EXGetAbilityState(a[0], a[1]);
+	}
+	uint32_t EXSetAbilityState_handler(const uint32_t* a, size_t) {
+		return EXSetAbilityState(a[0], a[1], (uint32_t*)&a[2]);
+	}
+	uint32_t EXGetAbilityDataReal_handler(const uint32_t* a, size_t) {
+		return EXGetAbilityDataReal(a[0], a[1], a[2]);
+	}
+	uint32_t EXSetAbilityDataReal_handler(const uint32_t* a, size_t) {
+		return EXSetAbilityDataReal(a[0], a[1], a[2], (jass::jreal_t*)&a[3]);
+	}
+	uint32_t EXGetAbilityDataInteger_handler(const uint32_t* a, size_t) {
+		return (uint32_t)EXGetAbilityDataInteger(a[0], a[1], a[2]);
+	}
+	uint32_t EXSetAbilityDataInteger_handler(const uint32_t* a, size_t) {
+		return EXSetAbilityDataInteger(a[0], a[1], a[2], a[3]);
+	}
+	uint32_t EXGetAbilityDataString_handler(const uint32_t* a, size_t) {
+		return make_jstr(jass::from_string(EXGetAbilityDataString(a[0], a[1], a[2])));
+	}
+	uint32_t EXSetAbilityDataString_handler(const uint32_t* a, size_t) {
+		return EXSetAbilityDataString(a[0], a[1], a[2], a[3]);
+	}
+	uint32_t EXSetAbilityAEmeDataA_handler(const uint32_t* a, size_t) {
+		return EXSetAbilityAEmeDataA(a[0], a[1]);
+	}
+	uint32_t EXGetBuffDataString_handler(const uint32_t* a, size_t) {
+		return make_jstr(jass::from_string((jass::jstring_t)EXGetBuffDataString(a[0], a[1])));
+	}
+	uint32_t EXSetBuffDataString_handler(const uint32_t* a, size_t) {
+		return EXSetBuffDataString(a[0], a[1], a[2]);
+	}
 }

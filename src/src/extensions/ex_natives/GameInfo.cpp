@@ -43,4 +43,15 @@ namespace warcraft3::japi {
 		jass::japi_add((uintptr_t)GetGameVersion, "GetGameVersion", "()I");
 		jass::japi_add((uintptr_t)GetPluginVersion, "GetPluginVersion", "()S");
 	}
+
+	// Bridge dispatch handlers
+	uint32_t GetMapName_handler(const uint32_t*, size_t) {
+		return GetMapName();
+	}
+	uint32_t GetGameVersion_handler(const uint32_t*, size_t) {
+		return (uint32_t)GetGameVersion();
+	}
+	uint32_t GetPluginVersion_handler(const uint32_t*, size_t) {
+		return GetPluginVersion();
+	}
 }

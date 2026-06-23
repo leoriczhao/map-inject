@@ -240,4 +240,45 @@ namespace warcraft3::japi {
 		jass::japi_add((uintptr_t)EXEffectMatReset,   "EXEffectMatReset",   "(Heffect;)V");
 		jass::japi_add((uintptr_t)EXSetEffectSpeed,   "EXSetEffectSpeed",   "(Heffect;R)V");
 	}
+
+	// Bridge dispatch handlers
+	uint32_t EXSetEffectXY_handler(const uint32_t* a, size_t) {
+		EXSetEffectXY(a[0], (jass::jreal_t*)&a[1], (jass::jreal_t*)&a[2]); return 0;
+	}
+	uint32_t EXSetEffectZ_handler(const uint32_t* a, size_t) {
+		EXSetEffectZ(a[0], (jass::jreal_t*)&a[1]); return 0;
+	}
+	uint32_t EXGetEffectX_handler(const uint32_t* a, size_t) {
+		return EXGetEffectX(a[0]);
+	}
+	uint32_t EXGetEffectY_handler(const uint32_t* a, size_t) {
+		return EXGetEffectY(a[0]);
+	}
+	uint32_t EXGetEffectZ_handler(const uint32_t* a, size_t) {
+		return EXGetEffectZ(a[0]);
+	}
+	uint32_t EXSetEffectSize_handler(const uint32_t* a, size_t) {
+		EXSetEffectSize(a[0], (jass::jreal_t*)&a[1]); return 0;
+	}
+	uint32_t EXGetEffectSize_handler(const uint32_t* a, size_t) {
+		return EXGetEffectSize(a[0]);
+	}
+	uint32_t EXEffectMatRotateX_handler(const uint32_t* a, size_t) {
+		EXEffectMatRotateX(a[0], (jass::jreal_t*)&a[1]); return 0;
+	}
+	uint32_t EXEffectMatRotateY_handler(const uint32_t* a, size_t) {
+		EXEffectMatRotateY(a[0], (jass::jreal_t*)&a[1]); return 0;
+	}
+	uint32_t EXEffectMatRotateZ_handler(const uint32_t* a, size_t) {
+		EXEffectMatRotateZ(a[0], (jass::jreal_t*)&a[1]); return 0;
+	}
+	uint32_t EXEffectMatScale_handler(const uint32_t* a, size_t) {
+		EXEffectMatScale(a[0], (jass::jreal_t*)&a[1], (jass::jreal_t*)&a[2], (jass::jreal_t*)&a[3]); return 0;
+	}
+	uint32_t EXEffectMatReset_handler(const uint32_t* a, size_t) {
+		EXEffectMatReset(a[0]); return 0;
+	}
+	uint32_t EXSetEffectSpeed_handler(const uint32_t* a, size_t) {
+		EXSetEffectSpeed(a[0], (jass::jreal_t*)&a[1]); return 0;
+	}
 }

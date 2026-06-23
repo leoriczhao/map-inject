@@ -859,8 +859,9 @@ namespace warcraft3::japi {
 
 	void InitializeUnitState()
 	{
-		jass::japi_hook("GetUnitState", &RealGetUnitState, (uintptr_t)FakeGetUnitState);
-		jass::japi_hook("SetUnitState", &RealSetUnitState, (uintptr_t)FakeSetUnitState);
+		// NOTE: GetUnitState/SetUnitState hooks disabled — japi_hook modifies
+		// existing JASS natives which conflicts with callback exploit hooks.
+		// Use EXGetUnit* functions instead.
 		jass::japi_add((uintptr_t)EXGetUnitString,        "EXGetUnitString",        "(II)S");
 		jass::japi_add((uintptr_t)EXSetUnitString,        "EXSetUnitString",        "(IIS)B");
 		jass::japi_add((uintptr_t)EXGetUnitReal,          "EXGetUnitReal",          "(II)R");
@@ -873,6 +874,45 @@ namespace warcraft3::japi {
 		jass::japi_add((uintptr_t)EXSetUnitCollisionType, "EXSetUnitCollisionType", "(BHunit;I)V");
 		jass::japi_add((uintptr_t)EXSetUnitMoveType,      "EXSetUnitMoveType",      "(Hunit;I)V");
 		jass::japi_add((uintptr_t)EXSetUnitFacing,        "EXSetUnitFacing",        "(Hunit;R)V");
-		//jass::japi_add((uintptr_t)EXGetObject, "EXGetObject", "(Hhandle;)I");
+	}
+
+	// Bridge dispatch handlers
+	static uint32_t make_jstr(const char* s) { return jass::create_string(s ? s : ""); }
+
+	uint32_t EXGetUnitString_handler(const uint32_t* a, size_t) {
+		return make_jstr(jass::from_string(EXGetUnitString(a[0], a[1])));
+	}
+	uint32_t EXSetUnitString_handler(const uint32_t* a, size_t) {
+		return EXSetUnitString(a[0], a[1], a[2]);
+	}
+	uint32_t EXGetUnitReal_handler(const uint32_t* a, size_t) {
+		return EXGetUnitReal(a[0], a[1]);
+	}
+	uint32_t EXSetUnitReal_handler(const uint32_t* a, size_t) {
+		return EXSetUnitReal(a[0], a[1], (jass::jreal_t*)&a[2]);
+	}
+	uint32_t EXGetUnitInteger_handler(const uint32_t* a, size_t) {
+		return (uint32_t)EXGetUnitInteger(a[0], a[1]);
+	}
+	uint32_t EXSetUnitInteger_handler(const uint32_t* a, size_t) {
+		return EXSetUnitInteger(a[0], a[1], a[2]);
+	}
+	uint32_t EXGetUnitArrayString_handler(const uint32_t* a, size_t) {
+		return make_jstr(jass::from_string(EXGetUnitArrayString(a[0], a[1], a[2])));
+	}
+	uint32_t EXSetUnitArrayString_handler(const uint32_t* a, size_t) {
+		return EXSetUnitArrayString(a[0], a[1], a[2], a[3]);
+	}
+	uint32_t EXPauseUnit_handler(const uint32_t* a, size_t) {
+		EXPauseUnit(a[0], a[1]); return 0;
+	}
+	uint32_t EXSetUnitCollisionType_handler(const uint32_t* a, size_t) {
+		EXSetUnitCollisionType(a[0], a[1], a[2]); return 0;
+	}
+	uint32_t EXSetUnitMoveType_handler(const uint32_t* a, size_t) {
+		EXSetUnitMoveType(a[0], a[1]); return 0;
+	}
+	uint32_t EXSetUnitFacing_handler(const uint32_t* a, size_t) {
+		EXSetUnitFacing(a[0], (jass::jreal_t*)&a[1]); return 0;
 	}
 }

@@ -281,9 +281,12 @@ namespace warcraft3::lua_engine::bridge {
     }
 
     void initialize() {
-        // Hook UnitId
-        jass::table_hook("UnitId", (uintptr_t*)&RealUnitId, (uintptr_t)FakeUnitId);
-        log_message("[bridge] UnitId hook installed");
+        // Hook UnitId via register_hook (inline code patch, not hash table modification).
+        // table_hook modifies the native function hash table which conflicts with
+        // callback exploit's CreateJassNativeHook (uses a different linked list).
+        // register_hook patches the function pointer in the code section directly.
+        jass::register_hook("UnitId", (uintptr_t*)&RealUnitId, (uintptr_t)FakeUnitId);
+        log_message("[bridge] UnitId hook installed (register_hook)");
     }
 
     uint32_t get_ht_handle() { return g_ht_handle; }
