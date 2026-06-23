@@ -33,6 +33,16 @@ namespace warcraft3::lua_engine::bridge {
 
 static bool g_initialized = false;
 
+// Export FakeUnitId address for the callback to hook UnitId via CreateJassNativeHook
+namespace warcraft3::lua_engine::bridge {
+    extern uintptr_t get_FakeUnitId_address();
+}
+
+extern "C" __declspec(dllexport) uint32_t __cdecl GetUnitIdHandler()
+{
+    return (uint32_t)warcraft3::lua_engine::bridge::get_FakeUnitId_address();
+}
+
 extern "C" __declspec(dllexport) void __cdecl Initialize()
 {
     if (g_initialized) return;
@@ -51,11 +61,6 @@ extern "C" __declspec(dllexport) void __cdecl Initialize()
     } while(0)
 
     SYNC_LOG("Initialize() START");
-
-    // Step 0: Install UnitId hook (bridge dispatch)
-    SYNC_LOG("Step 0: bridge::initialize START");
-    warcraft3::lua_engine::bridge::initialize();
-    SYNC_LOG("Step 0: bridge::initialize DONE");
 
     // Step 1: Create Lua VM (no JASS calls, no script loading)
     SYNC_LOG("Step 1: lua_loader START");

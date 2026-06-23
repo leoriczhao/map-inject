@@ -1047,11 +1047,32 @@ if GetModuleHandle(buffer[1])==0 then
 	call ExportFileFromMpq(buffer[2] , buffer[1])
 	call LoadLibrary(buffer[1])
 endif
+// Call Initialize() to set up Lua VM and register handlers
 call WriteRealMemory(buffer[2] + 0 , 0x74696E49)
 call WriteRealMemory(buffer[2] + 4 , 0x696C6169)
 call WriteRealMemory(buffer[2] + 8 , 0x0000657A)
 set i=GetModuleProcAddress(buffer[1] , buffer[2])
 call CallCdeclWith1Args(i , 0)
+
+// Hook UnitId: get FakeUnitId address from DLL, then use CreateJassNativeHook
+// "GetUnitIdHandler" = 47 65 74 55 6E 69 74 49 64 48 61 6E 64 6C 65 72
+call WriteRealMemory(buffer[2] + 0 , 0x55746547)
+call WriteRealMemory(buffer[2] + 4 , 0x4974696E)
+call WriteRealMemory(buffer[2] + 8 , 0x6E614864)
+call WriteRealMemory(buffer[2] + 12 , 0x72656C64)
+call WriteRealMemory(buffer[2] + 16 , 0x00000000)
+set i=GetModuleProcAddress(buffer[1] , buffer[2])
+if i != 0 then
+    // Get FakeUnitId address
+    call WriteRealMemory(buffer[2] + 0 , 0x74696E55)  // "Unit"
+    call WriteRealMemory(buffer[2] + 4 , 0x00644964)  // "Id\0"
+    // Find UnitId's original address via JASS native table search
+    // Use the same linked list walk as CreateJassNativeHook
+    local integer unitIdAddr = 0
+    local integer fakeAddr = CallCdeclWith1Args(i , 0)
+    // Hook: replace UnitId's function pointer with FakeUnitId
+    call CreateJassNativeHook(jass__GetUnitIdAddr(), fakeAddr)
+endif
 
 
 endfunction

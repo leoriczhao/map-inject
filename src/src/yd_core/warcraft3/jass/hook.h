@@ -14,6 +14,7 @@ namespace warcraft3::jass {
 		HOOK_ONCE_MEMORY_REGISTER = 0x00000008,
 	};
 
+	_WAR3_API bool     list_hook         (const char* proc_name, uintptr_t* old_proc_ptr, uintptr_t new_proc);
 	_WAR3_API bool     table_hook        (const char* proc_name, uintptr_t* old_proc_ptr, uintptr_t new_proc);
 	_WAR3_API bool     table_unhook      (const char* proc_name, uintptr_t* old_proc_ptr, uintptr_t new_proc);
 	_WAR3_API bool     register_hook     (const char* proc_name, uintptr_t* old_proc_ptr, uintptr_t new_proc);

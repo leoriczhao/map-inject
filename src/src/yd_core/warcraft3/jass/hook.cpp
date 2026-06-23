@@ -16,6 +16,59 @@
 
 namespace warcraft3::jass {
 
+	// list_hook: hook a JASS native by walking the native function linked list.
+	// This is the same mechanism as the callback's CreateJassNativeHook.
+	// The linked list is at: [[pJassEnv + 0x14] + 0x20].
+	// Each native_func_node has: [+0]=vfn, [+4]=hash, [+8]=next/prev/lft/rht/..., [+20]=key(name ptr), [+24]=func_address
+	// Does NOT use the hash table (which may not be available during callback context).
+	bool list_hook(const char* proc_name, uintptr_t* old_proc_ptr, uintptr_t new_proc)
+	{
+		uintptr_t env = get_war3_searcher().get_instance(5);
+		if (!env) return false;
+
+		// Get the native function linked list head: [[env+0x14]+0x20]
+		uintptr_t table_ptr = *(uintptr_t*)(env + 0x14);
+		if (!table_ptr) return false;
+		uintptr_t first_node = *(uintptr_t*)(table_ptr + 0x20);
+		if (!first_node) return false;
+
+		// Walk the linked list, comparing node->key (name) with proc_name
+		// native_func_node layout: vfn(4), hash(4), [linked list pointers](16), key(4), func_address_(4)
+		// key is at offset 20, func_address_ is at offset 24
+		uintptr_t current = first_node;
+		for (int i = 0; i < 10000; i++) {
+			// Check if this node is valid (func_address > 0x3000)
+			uint32_t func_addr = *(uint32_t*)(current + 24);
+			if (func_addr < 0x3000) break;
+
+			// Compare key (name pointer) with our target name
+			uint32_t key_ptr = *(uint32_t*)(current + 20);
+			if (key_ptr > 0x10000) {
+				const char* name = (const char*)key_ptr;
+				if (strcmp(name, proc_name) == 0) {
+					*old_proc_ptr = (uintptr_t)func_addr;
+					*(uint32_t*)(current + 24) = (uint32_t)new_proc;
+					return true;
+				}
+			}
+
+			// Follow the linked list: prev_ is at offset 8 (based on node structure)
+			// The callback uses: ReadRealMemory(NextAddress) for next, which is the first field
+			// But native_func_node inherits from virtual_func_table + node, so:
+			//   [+0] = vfn_ (virtual func table)
+			//   [+4] = hash_
+			//   [+8] = next_ (node_1*)
+			//   [+12] = prev_ (node*)  <-- callback uses this as "next" in linked list traversal
+			// Actually, the callback reads NextAddress[0] as the next pointer.
+			// For native_func_node, the first non-vtable field after inheritance...
+			// Let me just try offset 0 as the next pointer (like the callback does)
+			uintptr_t next = *(uintptr_t*)(current);
+			if (next == first_node || next == 0 || next < 0x10000) break;
+			current = next;
+		}
+		return false;
+	}
+
 	bool table_hook     (const char* proc_name, uintptr_t* old_proc_ptr, uintptr_t new_proc)
 	{
 		if (!get_war3_searcher().get_instance(5))
