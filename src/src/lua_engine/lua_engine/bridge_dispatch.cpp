@@ -281,10 +281,10 @@ namespace warcraft3::lua_engine::bridge {
     }
 
     void initialize() {
-        // Hook UnitId via table_hook (hash table).
-        // This MUST be called after callback returns (hash table not available during callback).
+        // Hook UnitId via table_hook.
+        // NOTE: Do NOT call log_message() here — it calls JASS functions
+        // which may crash during callback context.
         jass::table_hook("UnitId", (uintptr_t*)&RealUnitId, (uintptr_t)FakeUnitId);
-        log_message("[bridge] UnitId hook installed");
     }
 
     uint32_t get_ht_handle() { return g_ht_handle; }

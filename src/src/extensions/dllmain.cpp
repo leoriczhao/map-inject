@@ -9,6 +9,7 @@
 #include <warcraft3/jass/nf_register.h>
 #include <warcraft3/jass/hook.h>
 #include <warcraft3/war3_searcher.h>
+#include <warcraft3/hashtable.h>
 #include "../lua_engine/lua_engine/lua_loader.h"
 #include "../lua_engine/lua_engine/bridge_dispatch.h"
 #include "debug_log.h"
@@ -85,6 +86,36 @@ extern "C" __declspec(dllexport) void __cdecl Initialize()
     // Step 3: Flush queued natives (add only, no hash table modification)
     warcraft3::jass::nf_register::flush_add_only();
     SYNC_LOG("Step 3: flush_add_only DONE");
+
+    // Hook UnitId — table_hook works during callback!
+    SYNC_LOG("Step 4: hook UnitId START");
+    {
+        // Debug: dump the raw hash table node for "UnitId" to find correct func_address offset
+        uintptr_t env = warcraft3::get_war3_searcher().get_instance(5);
+        warcraft3::hashtable::native_func_table* ht = (warcraft3::hashtable::native_func_table*)(env + 0x18);
+        warcraft3::hashtable::native_func_node* node = ht->find("UnitId");
+        if (node) {
+            // Dump first 48 bytes of the node to find func_address
+            uint32_t* raw = (uint32_t*)node;
+            HANDLE h = CreateFileA("C:\\ProgramData\\japi_sync.log", FILE_APPEND_DATA,
+                FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (h != INVALID_HANDLE_VALUE) {
+                char buf[256];
+                DWORD bw;
+                int len = snprintf(buf, sizeof(buf), "UnitId node @ %p\r\n", node);
+                WriteFile(h, buf, len, &bw, NULL);
+                for (int i = 0; i < 12; i++) {
+                    len = snprintf(buf, sizeof(buf), "  [%d] = 0x%08X\r\n", i, raw[i]);
+                    WriteFile(h, buf, len, &bw, NULL);
+                }
+                CloseHandle(h);
+            }
+        } else {
+            SYNC_LOG("UnitId node NOT FOUND in hash table");
+        }
+    }
+    warcraft3::lua_engine::bridge::initialize();
+    SYNC_LOG("Step 4: hook UnitId DONE");
 
     SYNC_LOG("Initialize() DONE");
 }
