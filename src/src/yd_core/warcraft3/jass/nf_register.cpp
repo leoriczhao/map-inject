@@ -42,4 +42,12 @@ namespace warcraft3::jass::nf_register {
         nfunction_add();
         nfunction_hook();
     }
+
+    // flush_add_only: register new natives without hooking existing ones.
+    // Safe to call during callback context (nfunction_hook modifies hash table
+    // which is not available during callback).
+    void flush_add_only()
+    {
+        nfunction_add();
+    }
 }

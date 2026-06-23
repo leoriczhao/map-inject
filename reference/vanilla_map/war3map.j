@@ -1700,7 +1700,9 @@ function main takes nothing returns nothing
     call SetAmbientNightSound( "LordaeronSummerNight" )
     call SetMapMusic( "Music", true, 0 )
     call initializePlugin(  )
-    // Deferred script loading — after callback returns and JASS VM is stable
+    // Hook UnitId after callback returns (hash table now available)
+    call HookUnitId()
+    // Deferred script loading
     call SaveStr(japi_ht, japi__key, 0, "()V")
     call UnitId("LoadScript")
     call CreateAllUnits(  )

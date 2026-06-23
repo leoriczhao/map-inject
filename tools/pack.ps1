@@ -149,16 +149,8 @@ if (-not (Test-Path $JFile)) {
 Write-Host '  [2/5] Bundle Lua'
 Bundle-Lua $MapDir "$WorkDir\war3map.lua"
 
-# 3. Patch war3map.j — insert LoadScript call after initializePlugin
-Write-Host '  [3/5] Patch war3map.j'
-$jContent = Get-Content $JFile -Raw -Encoding ASCII
-if ($jContent -notmatch 'LoadScript') {
-    $jContent = $jContent -replace '(call initializePlugin\s*\(\s*\))', "`$1`r`n    call SaveStr(japi_ht, japi__key, 0, `"()V`")`r`n    call UnitId(`"LoadScript`")"
-    Set-Content $JFile $jContent -Encoding ASCII
-    Write-Host '    Inserted LoadScript call'
-} else {
-    Write-Host '    LoadScript already present'
-}
+# 3. war3map.j — no patch needed
+Write-Host '  [3/5] war3map.j ready'
 
 # 4. Inject DLL and callback
 Write-Host '  [4/5] Inject DLL + callback'

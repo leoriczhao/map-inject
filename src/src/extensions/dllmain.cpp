@@ -13,52 +13,57 @@
 #include "../lua_engine/lua_engine/bridge_dispatch.h"
 #include "debug_log.h"
 
-// Forward declarations for lua_engine initialization
+// Forward declarations
 namespace warcraft3::lua_engine::lua_loader {
     void initialize();
+    void load_script();
 }
-
-// Forward declarations for yd_jass_api initialization
 namespace warcraft3::japi {
     void initialize();
     void initialize_ex_natives();
     uint32_t open_code_run_logs_handler(const uint32_t* args, size_t nargs);
 }
-
-// Forward declarations for bridge dispatch registration
 namespace warcraft3::lua_engine::bridge {
     typedef uint32_t (*cpp_handler_fn)(const uint32_t* args, size_t nargs);
     void register_cpp_handler(const char* name, const char* spec, cpp_handler_fn fn);
+    void initialize();
 }
 
 static bool g_initialized = false;
 
-// Export FakeUnitId address for the callback to hook UnitId via CreateJassNativeHook
-namespace warcraft3::lua_engine::bridge {
-    extern uintptr_t get_FakeUnitId_address();
+// HookUnitId — registered as JASS native via japi_add.
+// Called from war3map.j AFTER callback returns, when hash table is available.
+// Hooks UnitId via table_hook, then loads war3map.lua.
+extern "C" __declspec(dllexport) uint32_t __cdecl HookUnitId()
+{
+    static bool done = false;
+    if (done) return 0;
+    done = true;
+
+    DBG_LOG("HookUnitId() called — hooking UnitId");
+    warcraft3::lua_engine::bridge::initialize();
+    DBG_LOG("HookUnitId() — UnitId hooked, loading script");
+    warcraft3::lua_engine::lua_loader::load_script();
+    DBG_LOG("HookUnitId() done");
+    return 0;
 }
 
-extern "C" __declspec(dllexport) uint32_t __cdecl GetUnitIdHandler()
-{
-    return (uint32_t)warcraft3::lua_engine::bridge::get_FakeUnitId_address();
-}
+// Synchronous debug log macro (works even if async log hasn't flushed)
+#define SYNC_LOG(msg) do { \
+    HANDLE _h = CreateFileA("C:\\ProgramData\\japi_sync.log", \
+        FILE_APPEND_DATA, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, \
+        NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL); \
+    if (_h != INVALID_HANDLE_VALUE) { \
+        DWORD _bw; const char* _m = msg "\r\n"; \
+        WriteFile(_h, _m, (DWORD)strlen(_m), &_bw, NULL); \
+        CloseHandle(_h); \
+    } \
+} while(0)
 
 extern "C" __declspec(dllexport) void __cdecl Initialize()
 {
     if (g_initialized) return;
     g_initialized = true;
-
-    // Synchronous debug log — direct WriteFile, no sharing conflicts
-    #define SYNC_LOG(msg) do { \
-        HANDLE _h = CreateFileA("C:\\ProgramData\\japi_sync.log", \
-            FILE_APPEND_DATA, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, \
-            NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL); \
-        if (_h != INVALID_HANDLE_VALUE) { \
-            DWORD _bw; const char* _m = msg "\r\n"; \
-            WriteFile(_h, _m, (DWORD)strlen(_m), &_bw, NULL); \
-            CloseHandle(_h); \
-        } \
-    } while(0)
 
     SYNC_LOG("Initialize() START");
 
@@ -72,52 +77,16 @@ extern "C" __declspec(dllexport) void __cdecl Initialize()
     warcraft3::japi::initialize_ex_natives();
     SYNC_LOG("Step 2: initialize_ex_natives DONE");
 
-    // Step 3: Register LoadScript handler (deferred war3map.lua loading)
-    // This avoids calling JASS functions during Initialize() which would
-    // corrupt the callback exploit's memory state.
-    {
-        namespace lua_ld = warcraft3::lua_engine::lua_loader;
-        warcraft3::lua_engine::bridge::register_cpp_handler(
-            "LoadScript", "()V", lua_ld::LoadScript_bridge);
-        SYNC_LOG("Step 3: LoadScript handler registered");
-    }
-
-    SYNC_LOG("Initialize() DONE");
-
-    // Register bridge-dispatched handlers (UnitId hashtable RPC)
+    // Step 3: Register bridge-dispatched handlers (UnitId hashtable RPC)
     warcraft3::lua_engine::bridge::register_cpp_handler(
         "open_code_run_logs", "(B)V",
         warcraft3::japi::open_code_run_logs_handler);
 
-    // Initialize the D3D9 proxy API (newD3d9.dll)
-    // This registers all d3d.* handlers (CreateFont, CreateText, etc.)
-    // with the bridge dispatch so JASS can call them via UnitId.
-    {
-        HMODULE hD3D9 = GetModuleHandleA("newD3d9.dll");
-        if (!hD3D9) hD3D9 = GetModuleHandleA("d3d9.dll");
-        if (hD3D9) {
-            // InitializeD3DAPI(register_handler_fn, from_string_fn)
-            // register_handler_fn: void(*)(const char*, const char*, handler_fn)
-            // from_string_fn: const char*(*)(uint32_t)
-            typedef void (__cdecl *InitD3DAPIFn)(
-                void(*)(const char*, const char*, uint32_t(*)(const uint32_t*, size_t)),
-                const char*(*)(uint32_t));
-            auto init_fn = reinterpret_cast<InitD3DAPIFn>(
-                GetProcAddress(hD3D9, "InitializeD3DAPI"));
-            if (init_fn) {
-                init_fn(
-                    warcraft3::lua_engine::bridge::register_cpp_handler,
-                    warcraft3::jass::from_string);
-                DBG_LOG("InitializeD3DAPI() called successfully");
-            } else {
-                DBG_LOG("InitializeD3DAPI not found in D3D9 module");
-            }
-        } else {
-            DBG_LOG("newD3d9.dll not loaded yet — d3d.* handlers not registered");
-        }
-    }
+    // Step 3: Flush queued natives (add only, no hash table modification)
+    warcraft3::jass::nf_register::flush_add_only();
+    SYNC_LOG("Step 3: flush_add_only DONE");
 
-    DBG_LOG("Initialize() COMPLETE");
+    SYNC_LOG("Initialize() DONE");
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)

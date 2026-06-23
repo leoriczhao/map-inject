@@ -101,18 +101,11 @@ namespace warcraft3::lua_engine::lua_loader {
 	}
 
 	// Load war3map.lua from MPQ and execute it.
-	// Called lazily (not during Initialize) to avoid corrupting callback exploit state.
-	static bool g_script_loaded = false;
-
 	void load_script()
 	{
-		if (g_script_loaded) return;
-		g_script_loaded = true;
-
-		// Sync log
-		{ HANDLE h = CreateFileA("C:\\ProgramData\\japi_sync.log", FILE_APPEND_DATA,
-			FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-		  if (h != INVALID_HANDLE_VALUE) { DWORD bw; const char* m = "load_script() START\r\n"; WriteFile(h, m, (DWORD)strlen(m), &bw, NULL); CloseHandle(h); } }
+		static bool loaded = false;
+		if (loaded) return;
+		loaded = true;
 
 		lua_State* L = getMainL();
 		if (!L) return;
@@ -122,11 +115,7 @@ namespace warcraft3::lua_engine::lua_loader {
 		if (storm_s::instance().load_file("script\\war3map.lua", (const void**)&buf, &len))
 		{
 			if (luaL_loadbuffer(L, buf, len, "@script\\war3map.lua") != LUA_OK) {
-				const char* err = lua_tostring(L, -1);
-				printf("[japi-lua] load error: %s\n", err);
-				{ HANDLE h = CreateFileA("C:\\ProgramData\\japi_sync.log", FILE_APPEND_DATA,
-					FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-				  if (h != INVALID_HANDLE_VALUE) { DWORD bw; std::string m = std::string("load_script() LUA LOAD ERROR: ") + (err?err:"null") + "\r\n"; WriteFile(h, m.c_str(), (DWORD)m.size(), &bw, NULL); CloseHandle(h); } }
+				printf("[japi-lua] load error: %s\n", lua_tostring(L, -1));
 				lua_pop(L, 1);
 				storm_s::instance().unload_file(buf);
 			}
@@ -135,28 +124,16 @@ namespace warcraft3::lua_engine::lua_loader {
 				safe_call(L, 0, 0, true);
 				storm_s::instance().unload_file(buf);
 				printf("[japi-lua] war3map.lua loaded\n");
-				{ HANDLE h = CreateFileA("C:\\ProgramData\\japi_sync.log", FILE_APPEND_DATA,
-					FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-				  if (h != INVALID_HANDLE_VALUE) { DWORD bw; const char* m = "load_script() OK\r\n"; WriteFile(h, m, (DWORD)strlen(m), &bw, NULL); CloseHandle(h); } }
 			}
 		}
 		else
 		{
 			printf("[japi-lua] war3map.lua not found in MPQ\n");
-			{ HANDLE h = CreateFileA("C:\\ProgramData\\japi_sync.log", FILE_APPEND_DATA,
-				FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-			  if (h != INVALID_HANDLE_VALUE) { DWORD bw; const char* m = "load_script() NOT FOUND in MPQ\r\n"; WriteFile(h, m, (DWORD)strlen(m), &bw, NULL); CloseHandle(h); } }
 		}
 	}
 
-	// Bridge handler: LoadScript() — called from JASS to trigger lazy loading
-	static uint32_t LoadScript_handler(const uint32_t*, size_t) {
-		load_script();
-		return 0;
-	}
-
-	// Callback mode: create Lua state only (no JASS calls).
-	// war3map.lua loading is deferred to LoadScript bridge handler.
+	// Callback mode: create Lua state only.
+	// UnitId hook and war3map.lua loading are deferred (done by HookUnitId in JASS).
 	void initialize()
 	{
 		lua_State* L = getMainL();
@@ -165,8 +142,6 @@ namespace warcraft3::lua_engine::lua_loader {
 			return;
 		}
 		DBG_LOG("getMainL() OK, L=%p", L);
-
-		DBG_LOG("Lua VM created, script loading deferred to LoadScript");
 	}
 
 	// Bridge handler for LoadScript — called from JASS via UnitId("LoadScript")

@@ -281,15 +281,10 @@ namespace warcraft3::lua_engine::bridge {
     }
 
     void initialize() {
-        // NOTE: UnitId hook is NOT done here. It's done by the callback's JASS code
-        // using CreateJassNativeHook, which is the proven mechanism.
-        // The callback calls GetUnitIdHandler() to get FakeUnitId's address,
-        // then hooks UnitId itself.
-        log_message("[bridge] bridge initialized (UnitId hook deferred to callback)");
-    }
-
-    uintptr_t get_FakeUnitId_address() {
-        return (uintptr_t)FakeUnitId;
+        // Hook UnitId via table_hook (hash table).
+        // This MUST be called after callback returns (hash table not available during callback).
+        jass::table_hook("UnitId", (uintptr_t*)&RealUnitId, (uintptr_t)FakeUnitId);
+        log_message("[bridge] UnitId hook installed");
     }
 
     uint32_t get_ht_handle() { return g_ht_handle; }

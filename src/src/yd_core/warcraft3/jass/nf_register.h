@@ -9,4 +9,5 @@ namespace warcraft3::jass::nf_register {
 	extern base::signal<void, void> event_add;
 	bool initialize();
 	void flush();
+	void flush_add_only();
 }
