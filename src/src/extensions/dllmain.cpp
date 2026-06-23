@@ -20,6 +20,7 @@ namespace warcraft3::lua_engine::lua_loader {
 namespace warcraft3::japi {
     void initialize();
     void initialize_ex_natives();
+    uint32_t open_code_run_logs_handler(const uint32_t* args, size_t nargs);
 }
 
 // Forward declarations for bridge dispatch registration
@@ -51,6 +52,11 @@ extern "C" __declspec(dllexport) void __cdecl Initialize()
 
     // Flush — register all queued japi_add/japi_hook entries
     warcraft3::jass::nf_register::flush();
+
+    // Register bridge-dispatched handlers (UnitId hashtable RPC)
+    warcraft3::lua_engine::bridge::register_cpp_handler(
+        "open_code_run_logs", "(B)V",
+        warcraft3::japi::open_code_run_logs_handler);
 
     // Initialize the D3D9 proxy API (newD3d9.dll)
     // This registers all d3d.* handlers (CreateFont, CreateText, etc.)

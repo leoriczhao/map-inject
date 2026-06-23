@@ -12,6 +12,8 @@ namespace warcraft3::japi {
 	void InitializeEventDamageData();
 	void InitializeDisplayChat();
 	void InitializeEffect();
+	void InitializeGameInfo();
+	void InitializeCodeRunLogs();
 
 	void initialize_ex_natives()
 	{
@@ -21,5 +23,7 @@ namespace warcraft3::japi {
 		InitializeEventDamageData();
 		InitializeDisplayChat();
 		InitializeEffect();
+		InitializeGameInfo();
+		InitializeCodeRunLogs();
 	}
 }
